@@ -1,5 +1,6 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 
 const {
     findUserByEmail,
@@ -83,7 +84,8 @@ const loginUser = async ({ correo, password }, sessionData = {}) => {
         },
         process.env.JWT_SECRET,
         {
-            expiresIn: "15m"
+            expiresIn: "15m",
+             jwtid: crypto.randomUUID()
         }
     );
     const expira_en = new Date(Date.now() + 15 * 60 * 1000);
@@ -95,19 +97,25 @@ const loginUser = async ({ correo, password }, sessionData = {}) => {
      user_agent: sessionData.user_agent,
      expira_en
     });
-
+    
     return {
-        token,
-        usuario: {
-            id: usuario.id,
-            nombre_completo: usuario.nombre_completo,
-            correo: usuario.correo,
-            role_id: usuario.role_id
-        }
-    };
+    token,
+    usuario: {
+        id: usuario.id,
+        nombre_completo: usuario.nombre_completo,
+        correo: usuario.correo,
+        role_id: usuario.role_id
+    }
+};
+
+};
+
+const logoutUser = async (token) => {
+    await deleteSession(token);
 };
 
 module.exports = {
     registerUser,
-    loginUser
+    loginUser,
+    logoutUser
 };

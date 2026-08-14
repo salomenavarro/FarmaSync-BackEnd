@@ -2,7 +2,11 @@ const express = require("express");
 
 const router = express.Router();
 
-const { register, login } = require("./auth.controller");
+const {
+    register,
+    login,
+    logout
+} = require("./auth.controller");
 
 
 const {
@@ -33,6 +37,12 @@ router.get(
             usuario: req.usuario
         });
     }
+);
+
+router.post(
+    "/logout",
+    authMiddleware,
+    logout
 );
 
 module.exports = router;

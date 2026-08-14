@@ -1,4 +1,8 @@
-const { registerUser, loginUser } = require("./auth.service");
+const {
+    registerUser,
+    loginUser,
+    logoutUser
+} = require("./auth.service");
 
 const register = async (req, res) => {
     try {
@@ -39,7 +43,41 @@ const login = async (req, res) => {
     }
 };
 
+const logout = async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+
+        if (!authHeader) {
+            return res.status(401).json({
+                mensaje: "Token requerido"
+            });
+        }
+
+        const token = authHeader.split(" ")[1];
+
+        if (!token) {
+            return res.status(401).json({
+                mensaje: "Formato de token inválido"
+            });
+        }
+
+        await logoutUser(token);
+
+        res.status(200).json({
+            mensaje: "Sesión cerrada correctamente"
+        });
+
+    } catch (error) {
+        console.error("Error en logout:", error.message);
+
+        res.status(500).json({
+            mensaje: "Error interno del servidor"
+        });
+    }
+};
+
 module.exports = {
     register,
-    login
+    login,
+    logout
 };
