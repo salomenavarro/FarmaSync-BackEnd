@@ -4,11 +4,10 @@ const jwt = require("jsonwebtoken");
 const {
     findUserByEmail,
     findUserByDocument,
-    createUser
-} = require("./auth.repository");
-
-const {
-    findUserForLogin
+    createUser,
+    findUserForLogin,
+    createSession,
+    deleteSession
 } = require("./auth.repository");
 
 const registerUser = async ({
@@ -50,7 +49,7 @@ const registerUser = async ({
     return usuario;
 };
 
-const loginUser = async ({ correo, password }) => {
+const loginUser = async ({ correo, password }, sessionData = {}) => {
     const usuario = await findUserForLogin(correo);
 
     if (!usuario) {
@@ -87,6 +86,15 @@ const loginUser = async ({ correo, password }) => {
             expiresIn: "15m"
         }
     );
+    const expira_en = new Date(Date.now() + 15 * 60 * 1000);
+
+     await createSession({
+     user_id: usuario.id,
+     token,
+     ip_address: sessionData.ip_address,
+     user_agent: sessionData.user_agent,
+     expira_en
+    });
 
     return {
         token,

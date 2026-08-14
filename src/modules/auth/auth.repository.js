@@ -81,9 +81,55 @@ const findUserForLogin = async (correo) => {
     return result.rows[0];
 };
 
+const createSession = async ({
+    user_id,
+    token,
+    ip_address,
+    user_agent,
+    expira_en
+}) => {
+    const result = await pool.query(
+        `INSERT INTO user_sessions (
+            user_id,
+            token,
+            ip_address,
+            user_agent,
+            expira_en
+        )
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING
+            id,
+            user_id,
+            token,
+            ip_address,
+            user_agent,
+            ultima_actividad,
+            expira_en,
+            creado_en`,
+        [
+            user_id,
+            token,
+            ip_address || null,
+            user_agent || null,
+            expira_en
+        ]
+    );
+
+    return result.rows[0];
+};
+
+const deleteSession = async (token) => {
+    await pool.query(
+        "DELETE FROM user_sessions WHERE token = $1",
+        [token]
+    );
+};
+
 module.exports = {
     findUserByEmail,
     findUserByDocument,
     createUser,
-    findUserForLogin
+    findUserForLogin,
+    createSession,
+    deleteSession
 };

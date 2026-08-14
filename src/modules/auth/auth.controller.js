@@ -20,7 +20,10 @@ const register = async (req, res) => {
 
 const login = async (req, res) => {
     try {
-        const resultado = await loginUser(req.body);
+       const resultado = await loginUser(req.body, {
+    ip_address: req.ip,
+    user_agent: req.get("user-agent")
+    });
 
         res.status(200).json({
             mensaje: "Inicio de sesión exitoso",
