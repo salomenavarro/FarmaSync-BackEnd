@@ -1,9 +1,14 @@
 const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 
 const {
     findUserByEmail,
     findUserByDocument,
     createUser
+} = require("./auth.repository");
+
+const {
+    findUserForLogin
 } = require("./auth.repository");
 
 const registerUser = async ({
@@ -45,6 +50,56 @@ const registerUser = async ({
     return usuario;
 };
 
+const loginUser = async ({ correo, password }) => {
+    const usuario = await findUserForLogin(correo);
+
+    if (!usuario) {
+        const error = new Error("Correo o contraseña incorrectos");
+        error.status = 401;
+        throw error;
+    }
+
+    if (!usuario.activo) {
+        const error = new Error("El usuario está inactivo");
+        error.status = 403;
+        throw error;
+    }
+
+    const passwordCorrecta = await bcrypt.compare(
+        password,
+        usuario.password_hash
+    );
+
+    if (!passwordCorrecta) {
+        const error = new Error("Correo o contraseña incorrectos");
+        error.status = 401;
+        throw error;
+    }
+
+    const token = jwt.sign(
+        {
+            id: usuario.id,
+            role_id: usuario.role_id,
+            correo: usuario.correo
+        },
+        process.env.JWT_SECRET,
+        {
+            expiresIn: "15m"
+        }
+    );
+
+    return {
+        token,
+        usuario: {
+            id: usuario.id,
+            nombre_completo: usuario.nombre_completo,
+            correo: usuario.correo,
+            role_id: usuario.role_id
+        }
+    };
+};
+
 module.exports = {
-    registerUser
+    registerUser,
+    loginUser
 };

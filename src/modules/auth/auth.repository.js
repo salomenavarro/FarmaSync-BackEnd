@@ -58,8 +58,32 @@ const createUser = async ({
     return result.rows[0];
 };
 
+
+
+const findUserForLogin = async (correo) => {
+    const result = await pool.query(
+        `SELECT
+            id,
+            nombre_completo,
+            numero_documento,
+            correo,
+            telefono,
+            password_hash,
+            role_id,
+            activo,
+            intentos_fallidos,
+            bloqueado_hasta
+         FROM users
+         WHERE correo = $1`,
+        [correo]
+    );
+
+    return result.rows[0];
+};
+
 module.exports = {
     findUserByEmail,
     findUserByDocument,
-    createUser
+    createUser,
+    findUserForLogin
 };
