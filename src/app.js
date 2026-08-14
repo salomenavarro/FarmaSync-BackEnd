@@ -9,13 +9,8 @@ app.get("/", (req, res) => {
         mensaje: "FarmaSync Backend funcionando"
     });
 });
+const apiRoutes = require("./routes");
 
-const testRoutes = require("./routes/test.routes");
-
-app.use("/api", testRoutes);
-
-const rolesRoutes = require("./routes/roles.routes");
-
-app.use("/api/roles", rolesRoutes);
+app.use("/api", apiRoutes);
 
 module.exports = app;
