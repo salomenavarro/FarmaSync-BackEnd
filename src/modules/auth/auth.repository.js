@@ -60,7 +60,7 @@ const createUser = async ({
 
 
 
-const findUserForLogin = async (correo) => {
+const findUserForLogin = async (numero_documento) => {
     const result = await pool.query(
         `SELECT
             id,
@@ -74,8 +74,8 @@ const findUserForLogin = async (correo) => {
             intentos_fallidos,
             bloqueado_hasta
          FROM users
-         WHERE correo = $1`,
-        [correo]
+         WHERE numero_documento = $1`,
+        [numero_documento]
     );
 
     return result.rows[0];

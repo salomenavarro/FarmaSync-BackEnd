@@ -50,11 +50,11 @@ const registerUser = async ({
     return usuario;
 };
 
-const loginUser = async ({ correo, password }, sessionData = {}) => {
-    const usuario = await findUserForLogin(correo);
+const loginUser = async ({ numero_documento, password }, sessionData = {}) => {
+    const usuario = await findUserForLogin(numero_documento);
 
     if (!usuario) {
-        const error = new Error("Correo o contraseña incorrectos");
+        const error = new Error("numero de documento o contraseña incorrectos");
         error.status = 401;
         throw error;
     }
@@ -71,7 +71,7 @@ const loginUser = async ({ correo, password }, sessionData = {}) => {
     );
 
     if (!passwordCorrecta) {
-        const error = new Error("Correo o contraseña incorrectos");
+        const error = new Error("numero de documento o contraseña incorrectos");
         error.status = 401;
         throw error;
     }

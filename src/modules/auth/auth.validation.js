@@ -33,17 +33,16 @@ const validateRegister = (req, res, next) => {
 
 
 const validateLogin = (req, res, next) => {
-    const { correo, password } = req.body || {};
+    const { numero_documento, password } = req.body;
 
-    if (!correo || !password) {
+    if (!numero_documento || !password) {
         return res.status(400).json({
-            mensaje: "El correo y la contraseña son obligatorios"
+            mensaje: "El número de documento y la contraseña son obligatorios"
         });
     }
 
     next();
 };
-
 
 module.exports = {
     validateRegister,
