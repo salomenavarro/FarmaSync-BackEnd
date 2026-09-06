@@ -6,3 +6,58 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+model User {
+  id                  Int                  @id @default(autoincrement())
+  nombreCompleto      String               @map("nombre_completo") @db.VarChar(150)
+  numeroDocumento     String               @unique @map("numero_documento") @db.VarChar(20)
+  correo              String               @unique @map("correo") @db.VarChar(150)
+  telefono            String?              @map("telefono") @db.VarChar(20)
+  passwordHash        String               @map("password_hash") @db.VarChar(255)
+  roleId              Int                  @map("role_id")
+  intentosFallidos    Int                  @default(0) @map("intentos_fallidos") @db.SmallInt
+  bloqueadoHasta      DateTime?            @map("bloqueado_hasta") @db.Timestamp(6)
+  activo              Boolean              @default(true)
+  creadoEn            DateTime             @default(now()) @map("creado_en") @db.Timestamp(6)
+  actualizadoEn       DateTime             @default(now()) @updatedAt @map("actualizado_en") @db.Timestamp(6)
+  passwordResetTokens PasswordResetToken[]
+  user_sessions       user_sessions[]
+  roles               roles                @relation(fields: [roleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([correo], map: "idx_users_correo")
+  @@index([numeroDocumento], map: "idx_users_documento")
+  @@map("users")
+}
+
+model PasswordResetToken {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  token     String   @unique @db.VarChar(255)
+  expira_en DateTime @db.Timestamp(6)
+  usado     Boolean  @default(false)
+  creado_en DateTime @default(now()) @db.Timestamp(6)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([token], map: "idx_password_reset_token")
+  @@map("password_reset_tokens")
+}
+
+model roles {
+  id     Int    @id @default(autoincrement())
+  nombre String @unique @db.VarChar(30)
+  users  User[]
+}
+
+model user_sessions {
+  id               Int      @id @default(autoincrement())
+  user_id          Int
+  token            String   @unique @db.VarChar(500)
+  ip_address       String?  @db.VarChar(45)
+  user_agent       String?
+  ultima_actividad DateTime @default(now()) @db.Timestamp(6)
+  expira_en        DateTime @db.Timestamp(6)
+  creado_en        DateTime @default(now()) @db.Timestamp(6)
+  users            User     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([token], map: "idx_user_sessions_token")
+}
