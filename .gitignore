@@ -13,9 +13,8 @@
 # testing
 /coverage
 
-# next.js
-/.next/
-/out/
+# build
+/dist/
 
 # production
 /build
@@ -35,12 +34,8 @@ yarn-error.log*
 .env*
 !.env.example*
 
-# vercel
-.vercel
-
 # typescript
 *.tsbuildinfo
-next-env.d.ts
 
 # IDEs y Editores
 .vscode/
