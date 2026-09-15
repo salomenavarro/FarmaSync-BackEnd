@@ -6,3 +6,75 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+// Los nombres de columna (@map) están alineados EXACTAMENTE con
+// prisma/migrations/0001_init_auth_module/migration.sql — ese script
+// es la fuente de verdad del diseño de BD (RF-001..RF-017), no este
+// schema. Los nombres de campo en TypeScript (camelCase) sí siguen
+// convención de Prisma/JS; solo la columna real en Postgres queda
+// en español, tal como la diseñaste.
+
+model Role {
+  id    Int    @id @default(autoincrement())
+  name  String @unique @map("nombre")
+  users User[]
+
+  @@map("roles")
+}
+
+model User {
+  id                  Int       @id @default(autoincrement())
+  nombreCompleto      String    @map("nombre_completo")
+  numeroDocumento     String    @unique @map("numero_documento")
+  correo              String    @unique
+  telefono            String?
+  passwordHash        String    @map("password_hash")
+  roleId              Int       @map("role_id")
+  role                Role      @relation(fields: [roleId], references: [id])
+
+  // RF-002: control de intentos de login
+  failedLoginAttempts Int       @default(0) @map("intentos_fallidos")
+  lockedUntil         DateTime? @map("bloqueado_hasta")
+
+  activo              Boolean   @default(true)
+  createdAt           DateTime  @default(now()) @map("creado_en")
+  // El trigger trg_users_actualizado_en en Postgres ya mantiene esto
+  // al día; @updatedAt hace que Prisma también lo mande en cada
+  // update (doble seguro, no hace daño que ambos lo hagan).
+  updatedAt           DateTime  @updatedAt @map("actualizado_en")
+
+  passwordResetTokens PasswordResetToken[]
+  sessions            UserSession[]
+
+  @@map("users")
+}
+
+// RF-003: enlace de recuperación de contraseña, vigencia 30 min.
+model PasswordResetToken {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime @map("expira_en")
+  used      Boolean  @default(false) @map("usado")
+  createdAt DateTime @default(now()) @map("creado_en")
+
+  @@map("password_reset_tokens")
+}
+
+// RF-004 (cierre a los 15 min de inactividad) y RF-017 (logout
+// invalida el token). token_hash guarda un SHA-256 del JWT, no el
+// JWT en texto plano.
+model UserSession {
+  id              Int      @id @default(autoincrement())
+  userId          Int      @map("user_id")
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash       String   @unique @map("token_hash")
+  ipAddress       String?  @map("ip_address")
+  userAgent       String?  @map("user_agent")
+  ultimaActividad DateTime @default(now()) @map("ultima_actividad")
+  expiresAt       DateTime @map("expira_en")
+  createdAt       DateTime @default(now()) @map("creado_en")
+
+  @@map("user_sessions")
+}
