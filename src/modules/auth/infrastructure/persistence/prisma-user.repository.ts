@@ -59,4 +59,12 @@ export class PrismaUserRepository implements UserRepositoryPort {
       data: { failedLoginAttempts: 0, lockedUntil: null },
     });
   }
+
+  // NUEVO MÉTODO AGREGADO: Permite actualizar la contraseña del usuario (hash) tras la recuperación
+  async updatePassword(userId: number, newPasswordHash: string): Promise<void> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: newPasswordHash },
+    });
+  }
 }

@@ -4,6 +4,8 @@ import { GetCurrentUserUseCase } from "../../application/use-cases/get-current-u
 import { LoginUseCase } from "../../application/use-cases/login.use-case";
 import { LogoutUseCase } from "../../application/use-cases/logout.use-case";
 import { RegisterUseCase } from "../../application/use-cases/register.use-case";
+import { RecoverPasswordUseCase } from "../../application/use-cases/recover-password.use-case"; 
+import { ResetPasswordUseCase } from "../../application/use-cases/reset-password.use-case";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
 import { AuthDomainExceptionFilter } from "./filters/auth-domain-exception.filter";
@@ -25,6 +27,8 @@ export class AuthController {
     private readonly loginUseCase: LoginUseCase,
     private readonly getCurrentUserUseCase: GetCurrentUserUseCase,
     private readonly logoutUseCase: LogoutUseCase,
+    private readonly recoverPasswordUseCase: RecoverPasswordUseCase, 
+    private readonly resetPasswordUseCase: ResetPasswordUseCase,
   ) {}
 
   @Post("register")
@@ -105,5 +109,20 @@ export class AuthController {
     res.clearCookie(COOKIE_NAME, { path: "/" });
 
     return { message: "Sesión cerrada correctamente." };
+  }
+  //NUEVO ENDPOINT PARA RECUPERAR CONTRASEÑA POR NÚMERO DE DOCUMENTO
+  @Post("recover-password")
+  @HttpCode(200)
+  async recoverPassword(@Body("numeroDocumento") numeroDocumento: string) {
+    return await this.recoverPasswordUseCase.execute(numeroDocumento);
+  }
+  //Otro PARA RESETEARLO
+  @Post("reset-password")
+  @HttpCode(200)
+  async resetPassword(
+    @Body("token") token: string,
+    @Body("nuevaPassword") nuevaPassword: string,
+  ) {
+    return await this.resetPasswordUseCase.execute(token, nuevaPassword);
   }
 }

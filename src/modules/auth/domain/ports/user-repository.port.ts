@@ -24,4 +24,5 @@ export interface UserRepositoryPort {
   create(data: CreateUserData): Promise<UserEntity>;
   registerFailedAttempt(userId: number, lockedUntil: Date | null, attempts: number): Promise<void>;
   resetFailedAttempts(userId: number): Promise<void>;
+  updatePassword(userId: number, newPasswordHash: string): Promise<void>;
 }

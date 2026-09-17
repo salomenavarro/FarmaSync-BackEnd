@@ -5,6 +5,8 @@ import { GetCurrentUserUseCase } from "./application/use-cases/get-current-user.
 import { LoginUseCase } from "./application/use-cases/login.use-case";
 import { LogoutUseCase } from "./application/use-cases/logout.use-case";
 import { RegisterUseCase } from "./application/use-cases/register.use-case";
+import { RecoverPasswordUseCase } from "./application/use-cases/recover-password.use-case"; 
+import { ResetPasswordUseCase } from "./application/use-cases/reset-password.use-case";
 import { PASSWORD_HASHER } from "./domain/ports/password-hasher.port";
 import { SESSION_REPOSITORY } from "./domain/ports/session-repository.port";
 import { TOKEN_SERVICE } from "./domain/ports/token.port";
@@ -34,6 +36,8 @@ import { AuthController } from "./presentation/http/auth.controller";
     LoginUseCase,
     GetCurrentUserUseCase,
     LogoutUseCase,
+    RecoverPasswordUseCase,
+    ResetPasswordUseCase,
     // Aquí es donde el Symbol (el "enchufe") se conecta con la
     // implementación real (el "aparato"). Si mañana cambian bcrypt
     // por argon2, solo se cambia esta línea.
