@@ -10,6 +10,7 @@ import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
 import { AuthDomainExceptionFilter } from "./filters/auth-domain-exception.filter";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
+import { RecaptchaGuard } from "./guards/recaptcha.guard";
 import { RequestWithUser } from "./types/request-with-user";
 
 const COOKIE_NAME = "access_token";
@@ -32,6 +33,7 @@ export class AuthController {
   ) {}
 
   @Post("register")
+  @UseGuards(RecaptchaGuard)
   async register(@Body() dto: RegisterDto) {
     const user = await this.registerUseCase.execute(dto);
 
@@ -126,3 +128,4 @@ export class AuthController {
     return await this.resetPasswordUseCase.execute(token, nuevaPassword);
   }
 }
+

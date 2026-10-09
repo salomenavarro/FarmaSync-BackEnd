@@ -16,6 +16,9 @@ import { PrismaUserRepository } from "./infrastructure/persistence/prisma-user.r
 import { BcryptPasswordHasher } from "./infrastructure/security/bcrypt-password-hasher";
 import { JwtTokenService } from "./infrastructure/security/jwt-token.service";
 import { AuthController } from "./presentation/http/auth.controller";
+import { RecaptchaGuard } from "./presentation/http/guards/recaptcha.guard";
+import { EMAIL_SERVICE } from './domain/ports/email.port';
+import { NodemailerService } from './infrastructure/email/nodemailer.service';
 
 @Module({
   imports: [
@@ -30,6 +33,8 @@ import { AuthController } from "./presentation/http/auth.controller";
       }),
     }),
   ],
+
+  
   controllers: [AuthController],
   providers: [
     RegisterUseCase,
@@ -38,10 +43,12 @@ import { AuthController } from "./presentation/http/auth.controller";
     LogoutUseCase,
     RecoverPasswordUseCase,
     ResetPasswordUseCase,
+    RecaptchaGuard,
     // Aquí es donde el Symbol (el "enchufe") se conecta con la
     // implementación real (el "aparato"). Si mañana cambian bcrypt
     // por argon2, solo se cambia esta línea.
     { provide: USER_REPOSITORY, useClass: PrismaUserRepository },
+    {provide: EMAIL_SERVICE, useClass: NodemailerService},
     { provide: PASSWORD_HASHER, useClass: BcryptPasswordHasher },
     { provide: TOKEN_SERVICE, useClass: JwtTokenService },
     { provide: SESSION_REPOSITORY, useClass: PrismaSessionRepository },
