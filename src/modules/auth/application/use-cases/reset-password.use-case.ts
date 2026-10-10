@@ -24,10 +24,16 @@ export class ResetPasswordUseCase {
       throw new NotFoundException("Usuario no encontrado.");
     }
 
-    // 3. Hashear la nueva contraseña
+    // 3. Validar que la nueva contraseña no sea idéntica a la actual
+    const isSamePassword = await this.passwordHasher.compare(nuevaPassword, user.passwordHash);
+    if (isSamePassword) {
+      throw new BadRequestException("La nueva contraseña no puede ser igual a la contraseña actual.");
+    }
+
+    // 4. Hashear la nueva contraseña
     const hashedPassword = await this.passwordHasher.hash(nuevaPassword);
 
-    // 4. Actualizar la contraseña en la base de datos
+    // 5. Actualizar la contraseña en la base de datos
     await this.userRepository.updatePassword(user.id, hashedPassword);
 
     return { message: "Contraseña actualizada exitosamente." };
