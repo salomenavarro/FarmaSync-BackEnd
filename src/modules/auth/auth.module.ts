@@ -19,6 +19,7 @@ import { AuthController } from "./presentation/http/auth.controller";
 import { RecaptchaGuard } from "./presentation/http/guards/recaptcha.guard";
 import { EMAIL_SERVICE } from './domain/ports/email.port';
 import { NodemailerService } from './infrastructure/email/nodemailer.service';
+import { GoogleLoginUseCase } from './application/use-cases/google-login.use-case';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { NodemailerService } from './infrastructure/email/nodemailer.service';
     RecoverPasswordUseCase,
     ResetPasswordUseCase,
     RecaptchaGuard,
+    GoogleLoginUseCase,
     // Aquí es donde el Symbol (el "enchufe") se conecta con la
     // implementación real (el "aparato"). Si mañana cambian bcrypt
     // por argon2, solo se cambia esta línea.

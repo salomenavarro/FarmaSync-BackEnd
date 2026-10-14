@@ -1,5 +1,7 @@
 import { Body, Controller, Get, HttpCode, Post, Req, Res, UseFilters, UseGuards } from "@nestjs/common";
 import type { Response } from "express";
+import { GoogleLoginDto } from './dto/google-login.dto';
+import { GoogleLoginUseCase } from '../../application/use-cases/google-login.use-case';
 import { GetCurrentUserUseCase } from "../../application/use-cases/get-current-user.use-case";
 import { LoginUseCase } from "../../application/use-cases/login.use-case";
 import { LogoutUseCase } from "../../application/use-cases/logout.use-case";
@@ -24,6 +26,7 @@ const COOKIE_MAX_AGE_MS = 15 * 60 * 1000;
 @UseFilters(AuthDomainExceptionFilter)
 export class AuthController {
   constructor(
+    private readonly googleLoginUseCase: GoogleLoginUseCase,
     private readonly registerUseCase: RegisterUseCase,
     private readonly loginUseCase: LoginUseCase,
     private readonly getCurrentUserUseCase: GetCurrentUserUseCase,
@@ -31,6 +34,12 @@ export class AuthController {
     private readonly recoverPasswordUseCase: RecoverPasswordUseCase, 
     private readonly resetPasswordUseCase: ResetPasswordUseCase,
   ) {}
+
+  @Post('google')
+  async googleLogin(@Body() googleLoginDto: GoogleLoginDto) {
+  
+    return await this.googleLoginUseCase.execute(googleLoginDto.credentialToken);
+  }
 
   @Post("register")
   @UseGuards(RecaptchaGuard)
