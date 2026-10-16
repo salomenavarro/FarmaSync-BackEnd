@@ -1,12 +1,24 @@
-import { Body, Controller, Get, HttpCode, Post, Req, Res, UseFilters, UseGuards } from "@nestjs/common";
+
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Post,
+  Req,
+  Res,
+  UseFilters,
+  UseGuards,
+} from "@nestjs/common";
 import type { Response } from "express";
-import { GoogleLoginDto } from './dto/google-login.dto';
-import { GoogleLoginUseCase } from '../../application/use-cases/google-login.use-case';
+
+import { GoogleLoginDto } from "./dto/google-login.dto";
+import { GoogleLoginUseCase } from "../../application/use-cases/google-login.use-case";
 import { GetCurrentUserUseCase } from "../../application/use-cases/get-current-user.use-case";
 import { LoginUseCase } from "../../application/use-cases/login.use-case";
 import { LogoutUseCase } from "../../application/use-cases/logout.use-case";
 import { RegisterUseCase } from "../../application/use-cases/register.use-case";
-import { RecoverPasswordUseCase } from "../../application/use-cases/recover-password.use-case"; 
+import { RecoverPasswordUseCase } from "../../application/use-cases/recover-password.use-case";
 import { ResetPasswordUseCase } from "../../application/use-cases/reset-password.use-case";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
@@ -16,12 +28,10 @@ import { RecaptchaGuard } from "./guards/recaptcha.guard";
 import { RequestWithUser } from "./types/request-with-user";
 
 const COOKIE_NAME = "access_token";
-// RF-004: 15 minutos. Debe coincidir con el expiresIn del JwtModule
-// (ver auth.module.ts) y con SESSION_MINUTES en LoginUseCase.
+
+// La cookie dura 15 minutos, igual que la sesión del login tradicional.
 const COOKIE_MAX_AGE_MS = 15 * 60 * 1000;
 
-// Esta es la única capa que sabe de Request/Response/cookies.
-// Traduce HTTP <-> casos de uso; no tiene reglas de negocio propias.
 @Controller("auth")
 @UseFilters(AuthDomainExceptionFilter)
 export class AuthController {
@@ -31,16 +41,43 @@ export class AuthController {
     private readonly loginUseCase: LoginUseCase,
     private readonly getCurrentUserUseCase: GetCurrentUserUseCase,
     private readonly logoutUseCase: LogoutUseCase,
-    private readonly recoverPasswordUseCase: RecoverPasswordUseCase, 
+    private readonly recoverPasswordUseCase: RecoverPasswordUseCase,
     private readonly resetPasswordUseCase: ResetPasswordUseCase,
   ) {}
 
-  @Post('google')
-  async googleLogin(@Body() googleLoginDto: GoogleLoginDto) {
-  
-    return await this.googleLoginUseCase.execute(googleLoginDto.credentialToken);
+  // Inicio de sesión con Google
+  @Post("google")
+  @HttpCode(200)
+  async googleLogin(
+    @Body() googleLoginDto: GoogleLoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.googleLoginUseCase.execute(
+      googleLoginDto.credentialToken,
+    );
+
+    // Se utiliza la misma cookie que en el login tradicional.
+    res.cookie(COOKIE_NAME, result.token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: COOKIE_MAX_AGE_MS,
+      path: "/",
+    });
+
+    return {
+      message: result.message,
+      usuario: {
+        id: result.user.id,
+        nombreCompleto: result.user.nombreCompleto,
+        numeroDocumento: result.user.numeroDocumento,
+        correo: result.user.correo,
+        roleId: result.user.roleId,
+      },
+    };
   }
 
+  // Registro de usuarios
   @Post("register")
   @UseGuards(RecaptchaGuard)
   async register(@Body() dto: RegisterDto) {
@@ -55,9 +92,14 @@ export class AuthController {
     };
   }
 
+  // Inicio de sesión tradicional
   @Post("login")
   @HttpCode(200)
-  async login(@Body() dto: LoginDto, @Req() req: RequestWithUser, @Res({ passthrough: true }) res: Response) {
+  async login(
+    @Body() dto: LoginDto,
+    @Req() req: RequestWithUser,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const { user, token } = await this.loginUseCase.execute({
       numeroDocumento: dto.numeroDocumento,
       password: dto.password,
@@ -65,9 +107,6 @@ export class AuthController {
       userAgent: req.get("user-agent") ?? null,
     });
 
-    // El JWT viaja en una cookie httpOnly: JavaScript en el navegador
-    // NO puede leerla (mitiga XSS). Por eso el frontend nuevo ya NO
-    // necesita hacer localStorage.setItem("token", ...).
     res.cookie(COOKIE_NAME, token, {
       httpOnly: true,
       sameSite: "lax",
@@ -87,8 +126,7 @@ export class AuthController {
     };
   }
 
-  // Lo consulta el frontend (server-side, reenviando la cookie) para
-  // saber "¿sigue habiendo sesión?" antes de mostrar /dashboard.
+  // Consultar el usuario de la sesión actual
   @Get("me")
   @UseGuards(JwtAuthGuard)
   async me(@Req() req: RequestWithUser) {
@@ -105,12 +143,14 @@ export class AuthController {
     };
   }
 
-  // RF-017: requiere sesión activa para poder cerrarla (no tiene
-  // sentido "cerrar sesión" sin haber tenido una).
+  // Cerrar sesión
   @Post("logout")
   @HttpCode(200)
   @UseGuards(JwtAuthGuard)
-  async logout(@Req() req: RequestWithUser, @Res({ passthrough: true }) res: Response) {
+  async logout(
+    @Req() req: RequestWithUser,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const token = req.cookies?.[COOKIE_NAME];
 
     if (token) {
@@ -119,22 +159,30 @@ export class AuthController {
 
     res.clearCookie(COOKIE_NAME, { path: "/" });
 
-    return { message: "Sesión cerrada correctamente." };
+    return {
+      message: "Sesión cerrada correctamente.",
+    };
   }
-  //NUEVO ENDPOINT PARA RECUPERAR CONTRASEÑA POR NÚMERO DE DOCUMENTO
+
+  // Recuperar contraseña
   @Post("recover-password")
   @HttpCode(200)
-  async recoverPassword(@Body("numeroDocumento") numeroDocumento: string) {
+  async recoverPassword(
+    @Body("numeroDocumento") numeroDocumento: string,
+  ) {
     return await this.recoverPasswordUseCase.execute(numeroDocumento);
   }
-  //Otro PARA RESETEARLO
+
+  // Restablecer contraseña
   @Post("reset-password")
   @HttpCode(200)
   async resetPassword(
     @Body("token") token: string,
     @Body("nuevaPassword") nuevaPassword: string,
   ) {
-    return await this.resetPasswordUseCase.execute(token, nuevaPassword);
+    return await this.resetPasswordUseCase.execute(
+      token,
+      nuevaPassword,
+    );
   }
 }
-

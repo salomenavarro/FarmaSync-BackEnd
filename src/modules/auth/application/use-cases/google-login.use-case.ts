@@ -1,77 +1,133 @@
-import { Injectable, Inject, UnauthorizedException } from "@nestjs/common";
+
+import {
+  Injectable,
+  Inject,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { OAuth2Client } from "google-auth-library";
-import { USER_REPOSITORY, UserRepositoryPort } from "../../domain/ports/user-repository.port";
-import { TOKEN_SERVICE, TokenServicePort } from "../../domain/ports/token.port";
+
+import {
+  USER_REPOSITORY,
+  UserRepositoryPort,
+} from "../../domain/ports/user-repository.port";
+
+import {
+  TOKEN_SERVICE,
+  TokenServicePort,
+} from "../../domain/ports/token.port";
 
 @Injectable()
 export class GoogleLoginUseCase {
-  private googleClient: OAuth2Client;
+  private readonly googleClient: OAuth2Client;
 
   constructor(
-    @Inject(USER_REPOSITORY) private readonly userRepository: UserRepositoryPort,
-    @Inject(TOKEN_SERVICE) private readonly tokenService: TokenServicePort,
+    @Inject(USER_REPOSITORY)
+    private readonly userRepository: UserRepositoryPort,
+
+    @Inject(TOKEN_SERVICE)
+    private readonly tokenService: TokenServicePort,
   ) {
-    // Inicializa el cliente de Google con la variable de entorno
-    this.googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+    this.googleClient = new OAuth2Client(
+      process.env.GOOGLE_CLIENT_ID,
+    );
   }
 
-  async execute(credentialToken: string): Promise<{ message: string, token: string, user: any }> {
+  async execute(credentialToken: string): Promise<{
+    message: string;
+    token: string;
+    user: {
+      id: number | string;
+      correo: string;
+      nombreCompleto: string;
+      numeroDocumento: string;
+      roleId: number;
+      avatarUrl?: string;
+    };
+  }> {
     try {
-      // 1. Validar el token con Google
+      // 1. Validar la credencial de identidad de Google.
       const ticket = await this.googleClient.verifyIdToken({
         idToken: credentialToken,
         audience: process.env.GOOGLE_CLIENT_ID,
       });
 
       const payload = ticket.getPayload();
+
       if (!payload) {
-        throw new UnauthorizedException("Payload de Google inválido.");
+        throw new UnauthorizedException(
+          "Payload de Google inválido.",
+        );
       }
 
-     const { email, name, picture, sub: googleId } = payload;
+      const {
+        email,
+        name,
+        picture,
+        sub: googleId,
+        email_verified: emailVerified,
+      } = payload;
 
       if (!email) {
-        throw new UnauthorizedException("El token de Google no contiene un correo electrónico.");
+        throw new UnauthorizedException(
+          "El token de Google no contiene un correo electrónico.",
+        );
       }
 
-      // Ahora TypeScript sabe que "email" es un string seguro (no undefined)
+      if (!emailVerified) {
+        throw new UnauthorizedException(
+          "El correo electrónico de Google no está verificado.",
+        );
+      }
+
+      // 2. Buscar al usuario por su correo electrónico.
       let user = await this.userRepository.findByCorreo(email);
-  
-     // 3. Crear el usuario si no existe en la base de datos
+
+      // 3. Crear el usuario si no existe.
       if (!user) {
         user = await this.userRepository.create({
           correo: email,
-          nombreCompleto: name || 'Usuario de Google',
-          numeroDocumento: `GOO-${googleId}`, // Identificador único usando el ID de Google
-          
-          // Propiedades faltantes agregadas:
-          telefono: '',
-          passwordHash: '',
+          nombreCompleto: name || "Usuario de Google",
+          numeroDocumento: `GOO-${googleId}`,
+          telefono: "",
+          passwordHash: "",
           roleId: 1,
         });
       }
-      // 4. Generar el token firmado usando el payload estándar de tu sistema
-      const sessionToken = this.tokenService.sign({ 
-        sub: user.id, 
-        roleId: user.roleId 
+
+      // 4. Generar el JWT de sesión de FarmaSync.
+      const sessionToken = this.tokenService.sign({
+        sub: user.id,
+        roleId: user.roleId,
       });
 
-      // 5. Retornar los datos al controlador
-      return { 
+      // 5. Devolver los datos al controlador.
+      // El controlador debe guardar sessionToken en la cookie
+      // httpOnly llamada access_token.
+      return {
         message: "Inicio de sesión exitoso.",
         token: sessionToken,
         user: {
           id: user.id,
           correo: user.correo,
+          nombreCompleto: user.nombreCompleto,
+          numeroDocumento: user.numeroDocumento,
           roleId: user.roleId,
-          nombre: name,
-          avatarUrl: picture
-        }
+          avatarUrl: picture,
+        },
       };
-
     } catch (error) {
-      console.error("Error en autenticación con Google:", error);
-      throw new UnauthorizedException("Token de Google inválido o expirado.");
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+
+      console.error(
+        "Error en autenticación con Google:",
+        error,
+      );
+
+      throw new UnauthorizedException(
+        "Token de Google inválido o expirado.",
+      );
     }
   }
 }
