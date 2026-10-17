@@ -1,0 +1,47 @@
+
+services:
+  # Servicio de Base de Datos PostgreSQL
+  postgres:
+    image: postgres:16-alpine
+    container_name: farmasync_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: farmasyncdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - farmasync_network
+
+  # Servicio del Backend NestJS
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: farmasync_backend
+    restart: always
+    ports:
+      - "3001:3001"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      CORS_ORIGIN: http://localhost:3000
+      # Apunta al nombre del servicio 'postgres' en lugar de 'localhost'
+      DATABASE_URL: postgresql://postgres:postgrespassword@postgres:5432/farmasyncdb?schema=public
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+    depends_on:
+      - postgres
+    networks:
+      - farmasync_network
+
+volumes:
+  postgres_data:
+
+networks:
+  farmasync_network:
+    driver: bridge
