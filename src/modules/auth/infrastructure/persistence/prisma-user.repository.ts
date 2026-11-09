@@ -67,4 +67,21 @@ export class PrismaUserRepository implements UserRepositoryPort {
       data: { passwordHash: newPasswordHash },
     });
   }
+
+  // NUEVO MÉTODO: Actualiza el documento temporal por la cédula real y el teléfono del usuario
+  async updateDocumentoAndTelefono(
+    userId: number,
+    numeroDocumento: string,
+    telefono: string,
+  ): Promise<UserEntity> {
+    const row = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        numeroDocumento,
+        telefono: telefono || "",
+      },
+    });
+
+    return this.toEntity(row);
+  }
 }

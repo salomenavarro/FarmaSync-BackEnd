@@ -25,4 +25,6 @@ export interface UserRepositoryPort {
   registerFailedAttempt(userId: number, lockedUntil: Date | null, attempts: number): Promise<void>;
   resetFailedAttempts(userId: number): Promise<void>;
   updatePassword(userId: number, newPasswordHash: string): Promise<void>;
+  // <--- NUEVO MÉTODO PARA EL ONBOARDING DE CÉDULA REAL
+  updateDocumentoAndTelefono(userId: number, numeroDocumento: string, telefono: string): Promise<UserEntity>;
 }

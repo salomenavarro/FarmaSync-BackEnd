@@ -1,10 +1,10 @@
-
 import {
   Injectable,
   Inject,
   UnauthorizedException,
 } from "@nestjs/common";
 import { OAuth2Client } from "google-auth-library";
+import * as bcrypt from "bcrypt";
 
 import {
   USER_REPOSITORY,
@@ -35,6 +35,7 @@ export class GoogleLoginUseCase {
   async execute(credentialToken: string): Promise<{
     message: string;
     token: string;
+    necesitaCompletarPerfil: boolean;
     user: {
       id: number | string;
       correo: string;
@@ -54,9 +55,7 @@ export class GoogleLoginUseCase {
       const payload = ticket.getPayload();
 
       if (!payload) {
-        throw new UnauthorizedException(
-          "Payload de Google inválido.",
-        );
+        throw new UnauthorizedException("Payload de Google inválido.");
       }
 
       const {
@@ -68,30 +67,39 @@ export class GoogleLoginUseCase {
       } = payload;
 
       if (!email) {
-        throw new UnauthorizedException(
-          "El token de Google no contiene un correo electrónico.",
-        );
+        throw new UnauthorizedException("El token de Google no contiene un correo electrónico.");
       }
 
       if (!emailVerified) {
-        throw new UnauthorizedException(
-          "El correo electrónico de Google no está verificado.",
-        );
+        throw new UnauthorizedException("El correo electrónico de Google no está verificado.");
       }
 
       // 2. Buscar al usuario por su correo electrónico.
       let user = await this.userRepository.findByCorreo(email);
+      let necesitaCompletarPerfil = false;
 
       // 3. Crear el usuario si no existe.
       if (!user) {
+        necesitaCompletarPerfil = true;
+        const dummyPasswordHash = await bcrypt.hash(`GOOGLE_${googleId}_${Date.now()}`, 10);
+        
+        // Asignamos un documento temporal seguro que cumple con VARCHAR(20)
+        // Podremos saber que es temporal si empieza con "TEMP-"
+        const documentoTemporal = `TEMP-${googleId.slice(-10)}`;
+
         user = await this.userRepository.create({
           correo: email,
           nombreCompleto: name || "Usuario de Google",
-          numeroDocumento: `GOO-${googleId}`,
+          numeroDocumento: documentoTemporal,
           telefono: "",
-          passwordHash: "",
-          roleId: 1,
+          passwordHash: dummyPasswordHash,
+          roleId: 1, // Rol paciente por defecto
         });
+      } else {
+        // Si el usuario ya existe pero su documento sigue siendo temporal, le pedimos completarlo
+        if (user.numeroDocumento.startsWith("TEMP-")) {
+          necesitaCompletarPerfil = true;
+        }
       }
 
       // 4. Generar el JWT de sesión de FarmaSync.
@@ -100,12 +108,11 @@ export class GoogleLoginUseCase {
         roleId: user.roleId,
       });
 
-      // 5. Devolver los datos al controlador.
-      // El controlador debe guardar sessionToken en la cookie
-      // httpOnly llamada access_token.
+      // 5. Devolver la respuesta incluyendo la bandera para el frontend
       return {
         message: "Inicio de sesión exitoso.",
         token: sessionToken,
+        necesitaCompletarPerfil,
         user: {
           id: user.id,
           correo: user.correo,
@@ -120,14 +127,8 @@ export class GoogleLoginUseCase {
         throw error;
       }
 
-      console.error(
-        "Error en autenticación con Google:",
-        error,
-      );
-
-      throw new UnauthorizedException(
-        "Token de Google inválido o expirado.",
-      );
+      console.error("Error en autenticación con Google:", error);
+      throw new UnauthorizedException("Token de Google inválido o expirado.");
     }
   }
 }

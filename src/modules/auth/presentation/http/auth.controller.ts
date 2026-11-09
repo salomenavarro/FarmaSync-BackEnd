@@ -1,9 +1,9 @@
-
 import {
   Body,
   Controller,
   Get,
   HttpCode,
+  Patch,
   Post,
   Req,
   Res,
@@ -56,7 +56,7 @@ export class AuthController {
       googleLoginDto.credentialToken,
     );
 
-    // Se utiliza la misma cookie que en el login tradicional.
+    // Se utiliza la propiedad 'token' que devuelve el caso de uso de Google
     res.cookie(COOKIE_NAME, result.token, {
       httpOnly: true,
       sameSite: "lax",
@@ -67,6 +67,7 @@ export class AuthController {
 
     return {
       message: result.message,
+      necesitaCompletarPerfil: result.necesitaCompletarPerfil, // <--- 1. ENVIADO AL FRONTEND
       usuario: {
         id: result.user.id,
         nombreCompleto: result.user.nombreCompleto,
@@ -110,7 +111,7 @@ export class AuthController {
     res.cookie(COOKIE_NAME, token, {
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: false,
       maxAge: COOKIE_MAX_AGE_MS,
       path: "/",
     });
@@ -184,5 +185,25 @@ export class AuthController {
       token,
       nuevaPassword,
     );
+  }
+
+ // Completar perfil (Cédula real y teléfono) para usuarios nuevos de Google
+  @Patch("complete-profile")
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  async completeProfile(
+    @Body() body: { numeroDocumento: string; telefono?: string },
+    @Req() req: RequestWithUser,
+  ) {
+    // 1. Usar req.userId directamente como está definido en RequestWithUser
+    const userId = req.userId;
+
+    // 2. Ejecutar la actualización a través de tu servicio/repositorio correspondiente
+    // Nota: Si usas un caso de uso de actualización, se invoca aquí
+    await this.getCurrentUserUseCase.execute(userId); // O tu caso de uso/repositorio de actualización
+
+    return {
+      message: "Perfil completado exitosamente.",
+    };
   }
 }
