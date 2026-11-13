@@ -1,9 +1,9 @@
-
 import {
   Injectable,
   Inject,
   UnauthorizedException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { OAuth2Client } from "google-auth-library";
 
 import {
@@ -16,6 +16,13 @@ import {
   TokenServicePort,
 } from "../../domain/ports/token.port";
 
+import {
+  SESSION_REPOSITORY,
+  SessionRepositoryPort,
+} from "../../domain/ports/session-repository.port";
+
+const SESSION_MINUTES = 15;
+
 @Injectable()
 export class GoogleLoginUseCase {
   private readonly googleClient: OAuth2Client;
@@ -26,13 +33,21 @@ export class GoogleLoginUseCase {
 
     @Inject(TOKEN_SERVICE)
     private readonly tokenService: TokenServicePort,
+
+    @Inject(SESSION_REPOSITORY)
+    private readonly sessionRepository: SessionRepositoryPort,
+
+    private readonly configService: ConfigService,
   ) {
-    this.googleClient = new OAuth2Client(
-      process.env.GOOGLE_CLIENT_ID,
-    );
+    const clientId = this.configService.get<string>("GOOGLE_CLIENT_ID");
+    this.googleClient = new OAuth2Client(clientId);
   }
 
-  async execute(credentialToken: string): Promise<{
+  async execute(
+    credentialToken: string,
+    ipAddress: string | null = null,
+    userAgent: string | null = null,
+  ): Promise<{
     message: string;
     token: string;
     user: {
@@ -44,19 +59,18 @@ export class GoogleLoginUseCase {
       avatarUrl?: string;
     };
   }> {
+    const clientId = this.configService.get<string>("GOOGLE_CLIENT_ID");
+
     try {
-      // 1. Validar la credencial de identidad de Google.
       const ticket = await this.googleClient.verifyIdToken({
         idToken: credentialToken,
-        audience: process.env.GOOGLE_CLIENT_ID,
+        audience: clientId,
       });
 
       const payload = ticket.getPayload();
 
       if (!payload) {
-        throw new UnauthorizedException(
-          "Payload de Google inválido.",
-        );
+        throw new UnauthorizedException("Payload de Google inválido.");
       }
 
       const {
@@ -79,10 +93,8 @@ export class GoogleLoginUseCase {
         );
       }
 
-      // 2. Buscar al usuario por su correo electrónico.
       let user = await this.userRepository.findByCorreo(email);
 
-      // 3. Crear el usuario si no existe.
       if (!user) {
         user = await this.userRepository.create({
           correo: email,
@@ -94,15 +106,21 @@ export class GoogleLoginUseCase {
         });
       }
 
-      // 4. Generar el JWT de sesión de FarmaSync.
       const sessionToken = this.tokenService.sign({
         sub: user.id,
         roleId: user.roleId,
       });
 
-      // 5. Devolver los datos al controlador.
-      // El controlador debe guardar sessionToken en la cookie
-      // httpOnly llamada access_token.
+      const expiresAt = new Date(Date.now() + SESSION_MINUTES * 60_000);
+
+      await this.sessionRepository.create({
+        userId: user.id,
+        token: sessionToken,
+        ipAddress,
+        userAgent,
+        expiresAt,
+      });
+
       return {
         message: "Inicio de sesión exitoso.",
         token: sessionToken,
@@ -120,13 +138,10 @@ export class GoogleLoginUseCase {
         throw error;
       }
 
-      console.error(
-        "Error en autenticación con Google:",
-        error,
-      );
+      console.error("Detalle del error en GoogleLoginUseCase:", error);
 
       throw new UnauthorizedException(
-        "Token de Google inválido o expirado.",
+        "No se pudo completar la autenticación con Google.",
       );
     }
   }
