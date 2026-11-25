@@ -36,7 +36,8 @@ export class ManageReservationUseCase {
         dependiente: {
           select: {
             id: true,
-            nombreCompleto: true,
+            nombres: true,
+            apellidos: true,
             numeroDocumento: true,
             parentesco: true,
           },
@@ -130,7 +131,7 @@ export class ManageReservationUseCase {
       include: {
         user: { select: { id: true, nombreCompleto: true, numeroDocumento: true } },
         dependiente: {
-          select: { id: true, nombreCompleto: true, numeroDocumento: true },
+          select: { id: true, nombres: true, apellidos: true, numeroDocumento: true },
         },
         medicamento: true,
         sede: true,
@@ -161,7 +162,7 @@ export class ManageReservationUseCase {
       include: {
         user: { select: { id: true, nombreCompleto: true, numeroDocumento: true } },
         dependiente: {
-          select: { id: true, nombreCompleto: true, numeroDocumento: true },
+          select: { id: true, nombres: true, apellidos: true, numeroDocumento: true },
         },
         medicamento: true,
         sede: true,

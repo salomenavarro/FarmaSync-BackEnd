@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Req,
   UseGuards,
@@ -16,6 +17,7 @@ import { ManageEmpleadosUseCase } from '../../application/use-cases/manage-emple
 import { ManageGrupoFamiliarUseCase } from '../../application/use-cases/manage-grupo-familiar.use-case';
 import { CreateFarmaceuticoDto } from './dto/create-farmaceutico.dto';
 import { CreateDependienteDto } from './dto/create-dependiente.dto';
+import { UpdateDependienteDto } from './dto/update-dependiente.dto';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -51,6 +53,22 @@ export class UsersController {
   @Roles('PACIENTE', 'FARMACEUTICO', 'ADMINISTRADOR_EPS')
   listFamiliares(@Req() req: any) {
     return this.grupoFamiliarUseCase.listByTitular(req.userId);
+  }
+
+  @Get('grupo-familiar/:id')
+  @Roles('PACIENTE', 'FARMACEUTICO', 'ADMINISTRADOR_EPS')
+  getFamiliar(@Req() req: any, @Param('id', ParseIntPipe) id: number) {
+    return this.grupoFamiliarUseCase.getDependienteById(req.userId, id);
+  }
+
+  @Patch('grupo-familiar/:id')
+  @Roles('PACIENTE', 'FARMACEUTICO', 'ADMINISTRADOR_EPS')
+  updateFamiliar(
+    @Req() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateDependienteDto,
+  ) {
+    return this.grupoFamiliarUseCase.updateDependiente(req.userId, id, dto);
   }
 
   @Delete('grupo-familiar/:id')

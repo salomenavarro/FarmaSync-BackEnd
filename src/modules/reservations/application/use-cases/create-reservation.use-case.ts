@@ -1,4 +1,4 @@
-﻿import {
+import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -48,8 +48,8 @@ export class CreateReservationUseCase {
         where: { id: dto.dependienteId },
       });
 
-      if (!dependiente) {
-        throw new NotFoundException('El integrante del Plan Familiar no existe');
+      if (!dependiente || !dependiente.activo) {
+        throw new NotFoundException('El integrante del Plan Familiar no existe o está inactivo');
       }
 
       if (dependiente.titularId !== userId) {
@@ -180,7 +180,8 @@ export class CreateReservationUseCase {
           dependiente: {
             select: {
               id: true,
-              nombreCompleto: true,
+              nombres: true,
+              apellidos: true,
               tipoDocumento: true,
               numeroDocumento: true,
               parentesco: true,

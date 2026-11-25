@@ -1,4 +1,4 @@
-generator client {
+﻿generator client {
   provider = "prisma-client-js"
 }
 
@@ -71,7 +71,7 @@ model UserSession {
 }
 
 // ==========================================
-// MÓDULO 1: SEDES Y PLAN FAMILIAR (DEPENDIENTES)
+// MODULO 1: SEDES Y PLAN FAMILIAR (DEPENDIENTES)
 // ==========================================
 
 model Sede {
@@ -94,24 +94,27 @@ model Sede {
 }
 
 model Dependiente {
-  id              Int       @id @default(autoincrement())
-  titularId       Int       @map("titular_id")
-  titular         User      @relation(fields: [titularId], references: [id], onDelete: Cascade)
-  nombreCompleto  String    @map("nombre_completo")
-  tipoDocumento   String    @map("tipo_documento") // RC, TI, CC
-  numeroDocumento String    @unique @map("numero_documento")
-  parentesco      String
-  fechaNacimiento DateTime  @map("fecha_nacimiento")
-  createdAt       DateTime  @default(now()) @map("creado_en")
-  updatedAt       DateTime  @updatedAt @map("actualizado_en")
+  id                Int       @id @default(autoincrement())
+  titularId         Int       @map("titular_id")
+  titular           User      @relation(fields: [titularId], references: [id], onDelete: Cascade)
+  nombres           String
+  apellidos         String
+  tipoDocumento     String    @map("tipo_documento") // RC, TI, CC
+  numeroDocumento   String    @unique @map("numero_documento")
+  parentesco        String
+  fechaNacimiento   DateTime  @map("fecha_nacimiento")
+  correoElectronico String?   @map("correo_electronico")
+  activo            Boolean   @default(true)
+  createdAt         DateTime  @default(now()) @map("creado_en")
+  updatedAt         DateTime  @updatedAt @map("actualizado_en")
 
-  reservas        Reserva[]
+  reservas          Reserva[]
 
   @@map("dependientes")
 }
 
 // ==========================================
-// MÓDULO 2: CATÁLOGO, INVENTARIO Y ALERTAS
+// MODULO 2: CATALOGO, INVENTARIO Y ALERTAS
 // ==========================================
 
 model Medicamento {
@@ -158,7 +161,7 @@ model AlertaStock {
 }
 
 // ==========================================
-// MÓDULO 3: RESERVAS, PRÓRROGAS Y EXPIRACIÓN
+// MODULO 3: RESERVAS, PRORROGAS Y EXPIRACION
 // ==========================================
 
 enum EstadoReserva {
@@ -190,3 +193,4 @@ model Reserva {
 
   @@map("reservas")
 }
+
