@@ -7,13 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Los nombres de columna (@map) están alineados EXACTAMENTE con
-// prisma/migrations/0001_init_auth_module/migration.sql — ese script
-// es la fuente de verdad del diseño de BD (RF-001..RF-017), no este
-// schema. Los nombres de campo en TypeScript (camelCase) sí siguen
-// convención de Prisma/JS; solo la columna real en Postgres queda
-// en español, tal como la diseñaste.
-
 model Role {
   id    Int    @id @default(autoincrement())
   name  String @unique @map("nombre")
@@ -32,24 +25,25 @@ model User {
   roleId              Int       @map("role_id")
   role                Role      @relation(fields: [roleId], references: [id])
 
-  // RF-002: control de intentos de login
+  sedeId              Int?      @map("sede_id")
+  sede                Sede?     @relation(fields: [sedeId], references: [id])
+
   failedLoginAttempts Int       @default(0) @map("intentos_fallidos")
   lockedUntil         DateTime? @map("bloqueado_hasta")
 
   activo              Boolean   @default(true)
   createdAt           DateTime  @default(now()) @map("creado_en")
-  // El trigger trg_users_actualizado_en en Postgres ya mantiene esto
-  // al día; @updatedAt hace que Prisma también lo mande en cada
-  // update (doble seguro, no hace daño que ambos lo hagan).
   updatedAt           DateTime  @updatedAt @map("actualizado_en")
 
   passwordResetTokens PasswordResetToken[]
   sessions            UserSession[]
+  dependientes        Dependiente[]
+  alertasStock        AlertaStock[]
+  reservas            Reserva[]
 
   @@map("users")
 }
 
-// RF-003: enlace de recuperación de contraseña, vigencia 30 min.
 model PasswordResetToken {
   id        Int      @id @default(autoincrement())
   userId    Int      @map("user_id")
@@ -62,9 +56,6 @@ model PasswordResetToken {
   @@map("password_reset_tokens")
 }
 
-// RF-004 (cierre a los 15 min de inactividad) y RF-017 (logout
-// invalida el token). token_hash guarda un SHA-256 del JWT, no el
-// JWT en texto plano.
 model UserSession {
   id              Int      @id @default(autoincrement())
   userId          Int      @map("user_id")
@@ -77,4 +68,125 @@ model UserSession {
   createdAt       DateTime @default(now()) @map("creado_en")
 
   @@map("user_sessions")
+}
+
+// ==========================================
+// MÓDULO 1: SEDES Y PLAN FAMILIAR (DEPENDIENTES)
+// ==========================================
+
+model Sede {
+  id          Int              @id @default(autoincrement())
+  nombre      String
+  ciudad      String
+  zona        String
+  direccion   String
+  latitud     Float?
+  longitud    Float?
+  activa      Boolean          @default(true)
+  createdAt   DateTime         @default(now()) @map("creado_en")
+  updatedAt   DateTime         @updatedAt @map("actualizado_en")
+
+  empleados   User[]
+  inventarios InventarioSede[]
+  reservas    Reserva[]
+
+  @@map("sedes")
+}
+
+model Dependiente {
+  id              Int       @id @default(autoincrement())
+  titularId       Int       @map("titular_id")
+  titular         User      @relation(fields: [titularId], references: [id], onDelete: Cascade)
+  nombreCompleto  String    @map("nombre_completo")
+  tipoDocumento   String    @map("tipo_documento") // RC, TI, CC
+  numeroDocumento String    @unique @map("numero_documento")
+  parentesco      String
+  fechaNacimiento DateTime  @map("fecha_nacimiento")
+  createdAt       DateTime  @default(now()) @map("creado_en")
+  updatedAt       DateTime  @updatedAt @map("actualizado_en")
+
+  reservas        Reserva[]
+
+  @@map("dependientes")
+}
+
+// ==========================================
+// MÓDULO 2: CATÁLOGO, INVENTARIO Y ALERTAS
+// ==========================================
+
+model Medicamento {
+  id             Int              @id @default(autoincrement())
+  codigo         String           @unique
+  nombreGenerico String           @map("nombre_generico")
+  presentacion   String
+  concentracion  String?
+  requiereOrden  Boolean          @default(false) @map("requiere_orden")
+  createdAt      DateTime         @default(now()) @map("creado_en")
+  updatedAt      DateTime         @updatedAt @map("actualizado_en")
+
+  inventarios    InventarioSede[]
+  alertas        AlertaStock[]
+  reservas       Reserva[]
+
+  @@map("medicamentos")
+}
+
+model InventarioSede {
+  id            Int         @id @default(autoincrement())
+  sedeId        Int         @map("sede_id")
+  sede          Sede        @relation(fields: [sedeId], references: [id], onDelete: Cascade)
+  medicamentoId Int         @map("medicamento_id")
+  medicamento   Medicamento @relation(fields: [medicamentoId], references: [id], onDelete: Cascade)
+  cantidad      Int         @default(0)
+  updatedAt     DateTime    @updatedAt @map("actualizado_en")
+
+  @@unique([sedeId, medicamentoId])
+  @@map("inventario_sedes")
+}
+
+model AlertaStock {
+  id            Int         @id @default(autoincrement())
+  userId        Int         @map("user_id")
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  medicamentoId Int         @map("medicamento_id")
+  medicamento   Medicamento @relation(fields: [medicamentoId], references: [id], onDelete: Cascade)
+  notificado    Boolean     @default(false)
+  createdAt     DateTime    @default(now()) @map("creado_en")
+
+  @@unique([userId, medicamentoId, notificado])
+  @@map("alertas_stock")
+}
+
+// ==========================================
+// MÓDULO 3: RESERVAS, PRÓRROGAS Y EXPIRACIÓN
+// ==========================================
+
+enum EstadoReserva {
+  PENDIENTE
+  ENTREGADA
+  CANCELADA_USUARIO
+  EXPIRADA
+}
+
+model Reserva {
+  id                 Int           @id @default(autoincrement())
+  codigoReserva      String        @unique @map("codigo_reserva")
+  codigoQr           String        @map("codigo_qr")
+  userId             Int           @map("user_id")
+  user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dependienteId      Int?          @map("dependiente_id")
+  dependiente        Dependiente?  @relation(fields: [dependienteId], references: [id], onDelete: SetNull)
+  sedeId             Int           @map("sede_id")
+  sede               Sede          @relation(fields: [sedeId], references: [id], onDelete: Cascade)
+  medicamentoId      Int           @map("medicamento_id")
+  medicamento        Medicamento   @relation(fields: [medicamentoId], references: [id], onDelete: Cascade)
+  numeroOrdenMedica  String        @map("numero_orden_medica")
+  fechaRecogida      DateTime      @map("fecha_recogida")
+  fechaLimite        DateTime      @map("fecha_limite")
+  prorrogaSolicitada Boolean       @default(false) @map("prorroga_solicitada")
+  estado             EstadoReserva @default(PENDIENTE)
+  createdAt          DateTime      @default(now()) @map("creado_en")
+  updatedAt          DateTime      @updatedAt @map("actualizado_en")
+
+  @@map("reservas")
 }
