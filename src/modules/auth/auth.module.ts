@@ -20,6 +20,8 @@ import { RecaptchaGuard } from "./presentation/http/guards/recaptcha.guard";
 import { EMAIL_SERVICE } from './domain/ports/email.port';
 import { NodemailerService } from './infrastructure/email/nodemailer.service';
 import { GoogleLoginUseCase } from './application/use-cases/google-login.use-case';
+import { JwtAuthGuard } from './presentation/http/guards/jwt-auth.guard';
+import { RolesGuard } from './presentation/http/guards/roles.guard';
 
 @Module({
   imports: [
@@ -28,14 +30,10 @@ import { GoogleLoginUseCase } from './application/use-cases/google-login.use-cas
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         secret: config.get<string>("JWT_SECRET"),
-        // RF-004: debe coincidir con COOKIE_MAX_AGE_MS (controller)
-        // y SESSION_MINUTES (LoginUseCase).
         signOptions: { expiresIn: "15m" },
       }),
     }),
   ],
-
-  
   controllers: [AuthController],
   providers: [
     RegisterUseCase,
@@ -46,14 +44,19 @@ import { GoogleLoginUseCase } from './application/use-cases/google-login.use-cas
     ResetPasswordUseCase,
     RecaptchaGuard,
     GoogleLoginUseCase,
-    // Aquí es donde el Symbol (el "enchufe") se conecta con la
-    // implementación real (el "aparato"). Si mañana cambian bcrypt
-    // por argon2, solo se cambia esta línea.
+    JwtAuthGuard,
+    RolesGuard,
     { provide: USER_REPOSITORY, useClass: PrismaUserRepository },
-    {provide: EMAIL_SERVICE, useClass: NodemailerService},
+    { provide: EMAIL_SERVICE, useClass: NodemailerService },
     { provide: PASSWORD_HASHER, useClass: BcryptPasswordHasher },
     { provide: TOKEN_SERVICE, useClass: JwtTokenService },
     { provide: SESSION_REPOSITORY, useClass: PrismaSessionRepository },
+  ],
+  exports: [
+  TOKEN_SERVICE,
+  SESSION_REPOSITORY,
+  JwtAuthGuard,
+  RolesGuard,
   ],
 })
 export class AuthModule {}
