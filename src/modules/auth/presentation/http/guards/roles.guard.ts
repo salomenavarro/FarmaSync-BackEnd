@@ -36,11 +36,11 @@ export class RolesGuard implements CanActivate {
       where: { id: roleId },
     });
 
-    if (!role || !requiredRoles.includes(role.name)) {
-      throw new ForbiddenException(
-        'No tienes permisos para acceder a este recurso',
-      );
-    }
+  if (!role || !requiredRoles.includes(role.name.toUpperCase())) {
+    throw new ForbiddenException(
+      'No tienes permisos para acceder a este recurso',
+    );
+  }
 
     return true;
   }
