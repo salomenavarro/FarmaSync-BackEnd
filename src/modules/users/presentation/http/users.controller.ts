@@ -19,6 +19,8 @@ import { CreateFarmaceuticoDto } from './dto/create-farmaceutico.dto';
 import { CreateDependienteDto } from './dto/create-dependiente.dto';
 import { UpdateDependienteDto } from './dto/update-dependiente.dto';
 
+// Controlador HTTP en la capa de presentación: autentica/autoriza mediante
+// guards, parsea parámetros y delega toda la lógica al caso de uso.
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class UsersController {
@@ -55,12 +57,14 @@ export class UsersController {
     return this.grupoFamiliarUseCase.listByTitular(req.userId);
   }
 
+  // Nuevo: lo usa la pantalla de detalle (/dashboard/grupo-familiar/[id]).
   @Get('grupo-familiar/:id')
   @Roles('PACIENTE', 'FARMACEUTICO', 'ADMINISTRADOR_EPS')
   getFamiliar(@Req() req: any, @Param('id', ParseIntPipe) id: number) {
-    return this.grupoFamiliarUseCase.getDependienteById(req.userId, id);
+    return this.grupoFamiliarUseCase.getById(req.userId, id);
   }
 
+  // Nuevo: lo usa el lápiz de la tarjeta (editar dependiente).
   @Patch('grupo-familiar/:id')
   @Roles('PACIENTE', 'FARMACEUTICO', 'ADMINISTRADOR_EPS')
   updateFamiliar(

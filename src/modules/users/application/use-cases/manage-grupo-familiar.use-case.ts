@@ -1,31 +1,35 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Dependiente } from '@prisma/client';
+import { EstadoReserva } from '@prisma/client';
 import { PrismaService } from 'src/shared/database/prisma.service';
 import { CreateDependienteDto } from '../../presentation/http/dto/create-dependiente.dto';
 import { UpdateDependienteDto } from '../../presentation/http/dto/update-dependiente.dto';
 
+// Campos que salen hacia el front. Se declara una sola vez para no
+// filtrar titularId, createdAt, etc., y para que lista, detalle, alta y
+// edición respondan SIEMPRE con la misma forma.
+const CAMPOS_PUBLICOS = {
+  id: true,
+  nombres: true,
+  apellidos: true,
+  tipoDocumento: true,
+  numeroDocumento: true,
+  parentesco: true,
+  fechaNacimiento: true,
+  correoElectronico: true,
+  activo: true,
+} as const;
+
+// Caso de uso en la capa de aplicación: orquesta las reglas de negocio del
+// Plan Familiar (propiedad por titularId, unicidad de documento, reactivación
+// de registros desactivados y borrado seguro frente a reservas) usando Prisma.
 @Injectable()
 export class ManageGrupoFamiliarUseCase {
   constructor(private readonly prisma: PrismaService) {}
-
-  private toFrontendContract(dep: Dependiente) {
-    return {
-      id: String(dep.id),
-      nombres: dep.nombres,
-      apellidos: dep.apellidos,
-      tipoDocumento: dep.tipoDocumento,
-      numeroDocumento: dep.numeroDocumento,
-      parentesco: dep.parentesco,
-      fechaNacimiento: dep.fechaNacimiento.toISOString().slice(0, 10),
-      correoElectronico: dep.correoElectronico ?? undefined,
-      estado: dep.activo ? 'Activo' : 'Inactivo',
-      activo: dep.activo,
-    };
-  }
 
   async addDependiente(titularId: number, dto: CreateDependienteDto) {
     const existing = await this.prisma.dependiente.findUnique({
@@ -33,52 +37,39 @@ export class ManageGrupoFamiliarUseCase {
     });
 
     if (existing) {
+      // Si el mismo titular lo "eliminó" antes (quedó activo = false por
+      // tener historial de reservas), volver a agregarlo lo reactiva en
+      // vez de dar 409: para la persona es un alta normal.
+      if (existing.titularId === titularId && !existing.activo) {
+        return this.prisma.dependiente.update({
+          where: { id: existing.id },
+          data: { ...this.toData(dto), activo: true },
+          select: CAMPOS_PUBLICOS,
+        });
+      }
+
       throw new ConflictException(
         'Ya existe un dependiente registrado con ese número de documento',
       );
     }
 
-    const created = await this.prisma.dependiente.create({
-      data: {
-        titularId,
-        nombres: dto.nombres.trim(),
-        apellidos: dto.apellidos.trim(),
-        tipoDocumento: dto.tipoDocumento,
-        numeroDocumento: dto.numeroDocumento.trim(),
-        parentesco: dto.parentesco,
-        fechaNacimiento: new Date(`${dto.fechaNacimiento.slice(0, 10)}T00:00:00.000Z`),
-        correoElectronico:
-          dto.tipoDocumento === 'CC' && dto.correoElectronico?.trim()
-            ? dto.correoElectronico.trim()
-            : null,
-        activo: true,
-      },
+    return this.prisma.dependiente.create({
+      data: { titularId, ...this.toData(dto) },
+      select: CAMPOS_PUBLICOS,
     });
-
-    return this.toFrontendContract(created);
   }
 
   async listByTitular(titularId: number) {
-    const dependientes = await this.prisma.dependiente.findMany({
-      where: { titularId },
+    // Solo activos: lo desactivado "ya no está" para la persona.
+    return this.prisma.dependiente.findMany({
+      where: { titularId, activo: true },
       orderBy: { createdAt: 'asc' },
+      select: CAMPOS_PUBLICOS,
     });
-
-    return dependientes.map((dep) => this.toFrontendContract(dep));
   }
 
-  async getDependienteById(titularId: number, dependienteId: number) {
-    const dependiente = await this.prisma.dependiente.findFirst({
-      where: { id: dependienteId, titularId },
-    });
-
-    if (!dependiente) {
-      throw new NotFoundException(
-        'El dependiente no existe o no pertenece a tu grupo familiar',
-      );
-    }
-
-    return this.toFrontendContract(dependiente);
+  async getById(titularId: number, dependienteId: number) {
+    return this.findOwned(titularId, dependienteId);
   }
 
   async updateDependiente(
@@ -86,62 +77,92 @@ export class ManageGrupoFamiliarUseCase {
     dependienteId: number,
     dto: UpdateDependienteDto,
   ) {
-    const dependiente = await this.prisma.dependiente.findFirst({
-      where: { id: dependienteId, titularId },
-    });
+    const current = await this.findOwned(titularId, dependienteId);
 
-    if (!dependiente) {
-      throw new NotFoundException(
-        'El dependiente no existe o no pertenece a tu grupo familiar',
+    // Regla de negocio: se evalúa con el estado FINAL (guardado + cambios).
+    const tipoFinal = dto.tipoDocumento ?? current.tipoDocumento;
+    const correoFinal = dto.correoElectronico ?? current.correoElectronico;
+
+    if (tipoFinal === 'CC' && !correoFinal?.trim()) {
+      throw new BadRequestException(
+        'El correo electrónico es obligatorio para Cédula de Ciudadanía',
       );
     }
 
     if (
-      dto.numeroDocumento &&
-      dto.numeroDocumento.trim() !== dependiente.numeroDocumento
+      dto.numeroDocumento !== undefined &&
+      dto.numeroDocumento !== current.numeroDocumento
     ) {
-      const duplicate = await this.prisma.dependiente.findUnique({
-        where: { numeroDocumento: dto.numeroDocumento.trim() },
+      const repetido = await this.prisma.dependiente.findUnique({
+        where: { numeroDocumento: dto.numeroDocumento },
       });
-      if (duplicate) {
+      if (repetido) {
         throw new ConflictException(
-          'Ya existe otro dependiente registrado con ese número de documento',
+          'Ya existe un dependiente registrado con ese número de documento',
         );
       }
     }
 
-    const nextTipoDoc = dto.tipoDocumento ?? dependiente.tipoDocumento;
-    let nextCorreo = dependiente.correoElectronico;
-    if (nextTipoDoc !== 'CC') {
-      nextCorreo = null;
-    } else if (dto.correoElectronico !== undefined) {
-      nextCorreo = dto.correoElectronico?.trim() || null;
-    }
-
-    const updated = await this.prisma.dependiente.update({
+    return this.prisma.dependiente.update({
       where: { id: dependienteId },
       data: {
-        ...(dto.nombres !== undefined && { nombres: dto.nombres.trim() }),
-        ...(dto.apellidos !== undefined && { apellidos: dto.apellidos.trim() }),
-        ...(dto.tipoDocumento !== undefined && { tipoDocumento: dto.tipoDocumento }),
-        ...(dto.numeroDocumento !== undefined && {
-          numeroDocumento: dto.numeroDocumento.trim(),
-        }),
-        ...(dto.parentesco !== undefined && { parentesco: dto.parentesco }),
-        ...(dto.fechaNacimiento !== undefined && {
-          fechaNacimiento: new Date(`${dto.fechaNacimiento.slice(0, 10)}T00:00:00.000Z`),
-        }),
-        correoElectronico: nextCorreo,
-        ...(dto.activo !== undefined && { activo: dto.activo }),
+        nombres: dto.nombres?.trim(),
+        apellidos: dto.apellidos?.trim(),
+        tipoDocumento: dto.tipoDocumento,
+        numeroDocumento: dto.numeroDocumento?.trim(),
+        parentesco: dto.parentesco,
+        fechaNacimiento: dto.fechaNacimiento
+          ? new Date(dto.fechaNacimiento)
+          : undefined,
+        // El correo solo existe para CC; si deja de ser CC se limpia.
+        correoElectronico:
+          tipoFinal === 'CC' ? correoFinal!.trim() : null,
       },
+      select: CAMPOS_PUBLICOS,
     });
-
-    return this.toFrontendContract(updated);
   }
 
+  // Eliminar = lo que la persona ve (desaparece de su lista), pero el
+  // backend protege el historial (RF-013) porque reservas.dependiente_id
+  // es ON DELETE SET NULL y un borrado real dejaría reservas sin dueño.
   async removeDependiente(titularId: number, dependienteId: number) {
+    await this.findOwned(titularId, dependienteId);
+
+    // 1. Reservas activas: no se puede eliminar.
+    const reservasActivas = await this.prisma.reserva.count({
+      where: { dependienteId, estado: EstadoReserva.PENDIENTE },
+    });
+
+    if (reservasActivas > 0) {
+      throw new ConflictException(
+        'Cancela sus reservas pendientes antes de eliminarlo',
+      );
+    }
+
+    // 2. Con historial: se desactiva (sale de la lista, el historial queda).
+    const historial = await this.prisma.reserva.count({
+      where: { dependienteId },
+    });
+
+    if (historial > 0) {
+      await this.prisma.dependiente.update({
+        where: { id: dependienteId },
+        data: { activo: false },
+      });
+    } else {
+      // 3. Sin reservas: borrado real (RNF-003, derecho a eliminar datos).
+      await this.prisma.dependiente.delete({ where: { id: dependienteId } });
+    }
+
+    return { message: 'Dependiente eliminado de tu grupo familiar' };
+  }
+
+  // Busca por id Y titular Y activo: así un usuario no puede ver ni tocar
+  // dependientes de otro. Un 404 evita confirmar que el id existe.
+  private async findOwned(titularId: number, dependienteId: number) {
     const dependiente = await this.prisma.dependiente.findFirst({
-      where: { id: dependienteId, titularId },
+      where: { id: dependienteId, titularId, activo: true },
+      select: CAMPOS_PUBLICOS,
     });
 
     if (!dependiente) {
@@ -150,14 +171,20 @@ export class ManageGrupoFamiliarUseCase {
       );
     }
 
-    const deactivated = await this.prisma.dependiente.update({
-      where: { id: dependienteId },
-      data: { activo: false },
-    });
+    return dependiente;
+  }
 
+  private toData(dto: CreateDependienteDto) {
     return {
-      message: 'Dependiente desactivado de tu grupo familiar',
-      dependiente: this.toFrontendContract(deactivated),
+      nombres: dto.nombres.trim(),
+      apellidos: dto.apellidos.trim(),
+      tipoDocumento: dto.tipoDocumento,
+      numeroDocumento: dto.numeroDocumento.trim(),
+      parentesco: dto.parentesco,
+      fechaNacimiento: new Date(dto.fechaNacimiento),
+      // Solo se guarda para CC; para RC/TI se ignora aunque llegue.
+      correoElectronico:
+        dto.tipoDocumento === 'CC' ? dto.correoElectronico!.trim() : null,
     };
   }
 }
