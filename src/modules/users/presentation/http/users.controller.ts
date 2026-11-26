@@ -18,7 +18,8 @@ import { ManageGrupoFamiliarUseCase } from '../../application/use-cases/manage-g
 import { CreateFarmaceuticoDto } from './dto/create-farmaceutico.dto';
 import { CreateDependienteDto } from './dto/create-dependiente.dto';
 import { UpdateDependienteDto } from './dto/update-dependiente.dto';
-
+import { UpdateFarmaceuticoDto } from './dto/update-farmaceutico.dto';
+import { ToggleEstadoFarmaceuticoDto } from './dto/update-farmaceutico.dto';
 // Controlador HTTP en la capa de presentación: autentica/autoriza mediante
 // guards, parsea parámetros y delega toda la lógica al caso de uso.
 @Controller('users')
@@ -41,6 +42,24 @@ export class UsersController {
   @Roles('ADMINISTRADOR_EPS')
   listEmpleados() {
     return this.empleadosUseCase.listFarmaceuticos();
+  }
+
+  @Patch('empleados/:id')
+  @Roles('ADMINISTRADOR_EPS')
+  updateEmpleado(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateFarmaceuticoDto,
+  ) {
+    return this.empleadosUseCase.updateFarmaceutico(id, dto);
+  }
+
+  @Patch('empleados/:id/estado')
+  @Roles('ADMINISTRADOR_EPS')
+  toggleEstadoEmpleado(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ToggleEstadoFarmaceuticoDto,
+  ) {
+    return this.empleadosUseCase.toggleEstadoFarmaceutico(id, dto);
   }
 
   // --- Gestión de Grupo Familiar (Vista Dual) ---
