@@ -1,11 +1,33 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/shared/database/prisma.service';
 
+export interface FiltroReporteEps {
+  sedeId?: number;
+  fechaInicio?: string;
+  fechaFin?: string;
+}
+
 @Injectable()
 export class GetAdminDashboardUseCase {
   constructor(private readonly prisma: PrismaService) {}
 
-  async execute() {
+  async execute(filtros?: FiltroReporteEps) {
+    const whereReservas = {
+      ...(filtros?.sedeId ? { sedeId: filtros.sedeId } : {}),
+      ...(filtros?.fechaInicio || filtros?.fechaFin
+        ? {
+            createdAt: {
+              ...(filtros.fechaInicio
+                ? { gte: new Date(`${filtros.fechaInicio}T00:00:00.000Z`) }
+                : {}),
+              ...(filtros.fechaFin
+                ? { lte: new Date(`${filtros.fechaFin}T23:59:59.999Z`) }
+                : {}),
+            },
+          }
+        : {}),
+    };
+
     const [
       sedes,
       farmaceuticosActivos,
@@ -26,12 +48,14 @@ export class GetAdminDashboardUseCase {
         where: {
           activo: true,
           role: { name: 'FARMACEUTICO' },
+          ...(filtros?.sedeId ? { sedeId: filtros.sedeId } : {}),
         },
       }),
       this.prisma.inventarioSede.findMany({
         where: {
           cantidad: { lte: 15 },
           sede: { activa: true },
+          ...(filtros?.sedeId ? { sedeId: filtros.sedeId } : {}),
         },
         include: {
           medicamento: {
@@ -44,6 +68,7 @@ export class GetAdminDashboardUseCase {
         orderBy: { cantidad: 'asc' },
       }),
       this.prisma.reserva.findMany({
+        where: whereReservas,
         select: {
           sedeId: true,
           estado: true,
@@ -77,8 +102,10 @@ export class GetAdminDashboardUseCase {
     const reservasNoEfectuadas = reservas.filter(
       (r) => r.estado === 'CANCELADA_USUARIO' || r.estado === 'EXPIRADA',
     ).length;
+    const reservasPendientes = reservas.filter(
+      (r) => r.estado === 'PENDIENTE',
+    ).length;
 
-    // Agrupar demanda diaria por fecha (YYYY-MM-DD) y sedeId
     const mapaDemanda = new Map<
       string,
       { fecha: string; sedeId: number; cantidadSolicitudes: number }
@@ -118,6 +145,7 @@ export class GetAdminDashboardUseCase {
         totalReservas,
         reservasEntregadas,
         reservasNoEfectuadas,
+        reservasPendientes,
       },
     };
   }

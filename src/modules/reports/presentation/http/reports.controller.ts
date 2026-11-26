@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../../auth/presentation/http/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../auth/presentation/http/guards/roles.guard';
 import { Roles } from '../../../auth/presentation/http/guards/roles.decorator';
@@ -13,7 +13,15 @@ export class ReportsController {
 
   @Get('dashboard-eps')
   @Roles('ADMINISTRADOR_EPS')
-  getDashboardEps() {
-    return this.getAdminDashboardUseCase.execute();
+  getDashboardEps(
+    @Query('sedeId') sedeId?: string,
+    @Query('fechaInicio') fechaInicio?: string,
+    @Query('fechaFin') fechaFin?: string,
+  ) {
+    return this.getAdminDashboardUseCase.execute({
+      sedeId: sedeId ? Number(sedeId) : undefined,
+      fechaInicio,
+      fechaFin,
+    });
   }
 }
