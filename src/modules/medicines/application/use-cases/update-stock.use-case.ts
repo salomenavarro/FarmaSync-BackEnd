@@ -2,6 +2,7 @@
 import { PrismaService } from 'src/shared/database/prisma.service';
 import { InventoryRules } from '../../domain/entities/inventory-status.entity';
 import { UpdateStockDto } from '../../presentation/http/dto/update-stock.dto';
+import { IngresarLoteEanDto } from '../../presentation/http/dto/ingresar-lote-ean.dto';
 
 @Injectable()
 export class UpdateStockUseCase {
@@ -79,5 +80,38 @@ export class UpdateStockUseCase {
       estadoInventario: InventoryRules.calcularEstado(updatedInventario.cantidad),
       alertasNotificadas,
     };
+  }
+
+  async ingresarPorCodigoEan(userId: number, dto: IngresarLoteEanDto) {
+    const empleado = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { sedeId: true },
+    });
+    const sedeId = dto.sedeId ?? empleado?.sedeId;
+    if (!sedeId) {
+      throw new NotFoundException('El farmacéutico no tiene sede asignada');
+    }
+
+    const limpio = dto.codigo.trim();
+    const medicamento = await this.prisma.medicamento.findFirst({
+      where: {
+        OR: [{ codigoEan: limpio }, { codigo: limpio }],
+      },
+    });
+
+    if (!medicamento) {
+      throw new NotFoundException(
+        `No existe ningún medicamento registrado con código/EAN-13 "${limpio}"`,
+      );
+    }
+
+    const actual = await this.prisma.inventarioSede.findUnique({
+      where: {
+        sedeId_medicamentoId: { sedeId, medicamentoId: medicamento.id },
+      },
+    });
+
+    const nuevaCantidad = (actual?.cantidad ?? 0) + dto.cantidad;
+    return this.execute(medicamento.id, { sedeId, cantidad: nuevaCantidad });
   }
 }

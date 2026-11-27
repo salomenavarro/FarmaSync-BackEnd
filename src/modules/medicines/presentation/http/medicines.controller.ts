@@ -18,6 +18,7 @@ import { UpdateStockUseCase } from '../../application/use-cases/update-stock.use
 import { ManageStockAlertsUseCase } from '../../application/use-cases/manage-stock-alerts.use-case';
 import { CreateMedicineDto } from './dto/create-medicine.dto';
 import { UpdateStockDto } from './dto/update-stock.dto';
+import { IngresarLoteEanDto } from './dto/ingresar-lote-ean.dto';
 
 @Controller('medicines')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -52,6 +53,12 @@ export class MedicinesController {
   @Roles('FARMACEUTICO', 'ADMINISTRADOR_EPS')
   create(@Body() dto: CreateMedicineDto) {
     return this.searchMedicinesUseCase.create(dto);
+  }
+
+  @Post('lotes/ean')
+  @Roles('FARMACEUTICO', 'ADMINISTRADOR_EPS')
+  ingresarLoteEan(@Req() req: any, @Body() dto: IngresarLoteEanDto) {
+    return this.updateStockUseCase.ingresarPorCodigoEan(req.userId, dto);
   }
 
   @Patch(':id/stock')
