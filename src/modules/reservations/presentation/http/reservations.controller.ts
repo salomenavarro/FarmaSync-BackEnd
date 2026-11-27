@@ -6,6 +6,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -16,6 +17,8 @@ import { CreateReservationUseCase } from '../../application/use-cases/create-res
 import { ManageReservationUseCase } from '../../application/use-cases/manage-reservation.use-case';
 import { ExpireReservationsCron } from '../../application/jobs/expire-reservations.cron';
 import { CreateReservationDto } from './dto/create-reservation.dto';
+import { AlistarReservaDto } from './dto/alistar-reserva.dto';
+import { RechazarReservaDto } from './dto/rechazar-reserva.dto';
 
 @Controller('reservations')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -38,6 +41,21 @@ export class ReservationsController {
     return this.manageReservationUseCase.findMyReservations(req.userId);
   }
 
+  @Get('farmacia/sede')
+  @Roles('FARMACEUTICO', 'ADMINISTRADOR_EPS')
+  findPharmacyQueue(@Req() req: any, @Query('sedeId') sedeId?: string) {
+    return this.manageReservationUseCase.findBySedeOperacion(
+      req.userId,
+      sedeId ? Number(sedeId) : undefined,
+    );
+  }
+
+  @Get('farmacia/codigo/:codigoReserva')
+  @Roles('FARMACEUTICO', 'ADMINISTRADOR_EPS')
+  findByCode(@Param('codigoReserva') codigoReserva: string) {
+    return this.manageReservationUseCase.findByCodeForPharmacy(codigoReserva);
+  }
+
   @Patch(':id/prorroga')
   @Roles('PACIENTE', 'FARMACEUTICO', 'ADMINISTRADOR_EPS')
   requestExtension(
@@ -56,13 +74,46 @@ export class ReservationsController {
     return this.manageReservationUseCase.cancelByUser(req.userId, id);
   }
 
-  @Patch('entregar/:codigoReserva')
+  @Patch('alistar/:codigoReserva')
   @Roles('FARMACEUTICO', 'ADMINISTRADOR_EPS')
-  markAsDelivered(@Param('codigoReserva') codigoReserva: string) {
-    return this.manageReservationUseCase.markAsDelivered(codigoReserva);
+  markAsReady(
+    @Req() req: any,
+    @Param('codigoReserva') codigoReserva: string,
+    @Body() dto: AlistarReservaDto,
+  ) {
+    return this.manageReservationUseCase.markAsReady(
+      req.userId,
+      codigoReserva,
+      dto.metodo ?? 'POS',
+    );
   }
 
-  // Endpoint manual opcional para probar el Cron Job de expiración en sustentación/pruebas
+  @Patch('entregar/:codigoReserva')
+  @Roles('FARMACEUTICO', 'ADMINISTRADOR_EPS')
+  markAsDelivered(
+    @Req() req: any,
+    @Param('codigoReserva') codigoReserva: string,
+  ) {
+    return this.manageReservationUseCase.markAsDelivered(
+      codigoReserva,
+      req.userId,
+    );
+  }
+
+  @Patch('rechazar/:codigoReserva')
+  @Roles('FARMACEUTICO', 'ADMINISTRADOR_EPS')
+  rejectByPharmacy(
+    @Req() req: any,
+    @Param('codigoReserva') codigoReserva: string,
+    @Body() dto: RechazarReservaDto,
+  ) {
+    return this.manageReservationUseCase.rejectByPharmacy(
+      req.userId,
+      codigoReserva,
+      dto.motivo,
+    );
+  }
+
   @Post('cron/expirar-vencidas')
   @Roles('ADMINISTRADOR_EPS')
   triggerExpirationJob() {
