@@ -28,6 +28,9 @@ model User {
   sedeId              Int?      @map("sede_id")
   sede                Sede?     @relation(fields: [sedeId], references: [id])
 
+  reservasAlistadas   Reserva[]            @relation("AlistadoPor")
+  reservasEntregadas  Reserva[]            @relation("EntregadoPor")
+
   failedLoginAttempts Int       @default(0) @map("intentos_fallidos")
   lockedUntil         DateTime? @map("bloqueado_hasta")
 
@@ -127,6 +130,8 @@ model Medicamento {
   createdAt      DateTime         @default(now()) @map("creado_en")
   updatedAt      DateTime         @updatedAt @map("actualizado_en")
 
+  codigoEan      String?          @unique @map("codigo_ean")
+
   inventarios    InventarioSede[]
   alertas        AlertaStock[]
   reservas       Reserva[]
@@ -166,8 +171,10 @@ model AlertaStock {
 
 enum EstadoReserva {
   PENDIENTE
+  LISTA_PARA_RETIRO
   ENTREGADA
   CANCELADA_USUARIO
+  RECHAZADA_FARMACIA
   EXPIRADA
 }
 
@@ -190,6 +197,15 @@ model Reserva {
   estado             EstadoReserva @default(PENDIENTE)
   createdAt          DateTime      @default(now()) @map("creado_en")
   updatedAt          DateTime      @updatedAt @map("actualizado_en")
+
+  metodoAlistamiento String?       @map("metodo_alistamiento") // "POS" | "MANUAL"
+  alistadoAt         DateTime?     @map("alistado_en")
+  alistadoPorId      Int?          @map("alistado_por_id")
+  alistadoPor        User?         @relation("AlistadoPor", fields: [alistadoPorId], references: [id], onDelete: SetNull)
+  entregadoAt        DateTime?     @map("entregado_en")
+  entregadoPorId     Int?          @map("entregado_por_id")
+  entregadoPor       User?         @relation("EntregadoPor", fields: [entregadoPorId], references: [id], onDelete: SetNull)
+  motivoRechazo      String?       @map("motivo_rechazo")
 
   @@map("reservas")
 }
