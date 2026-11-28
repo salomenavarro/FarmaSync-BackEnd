@@ -8,21 +8,21 @@ async function main() {
 
   // 1. Crear los 3 Roles principales
   const rolePaciente = await prisma.role.upsert({
-    where: { name: 'PACIENTE' },
-    update: {},
-    create: { name: 'PACIENTE' },
+    where: { id: 1 },
+    update: { name: 'PACIENTE' },
+    create: { id: 1, name: 'PACIENTE' },
   });
 
   const roleFarmaceutico = await prisma.role.upsert({
-    where: { name: 'FARMACEUTICO' },
-    update: {},
-    create: { name: 'FARMACEUTICO' },
+    where: { id: 2 },
+    update: { name: 'FARMACEUTICO' },
+    create: { id: 2, name: 'FARMACEUTICO' },
   });
 
   const roleAdmin = await prisma.role.upsert({
-    where: { name: 'ADMINISTRADOR_EPS' },
-    update: {},
-    create: { name: 'ADMINISTRADOR_EPS' },
+    where: { id: 3 },
+    update: { name: 'ADMINISTRADOR_EPS' },
+    create: { id: 3, name: 'ADMINISTRADOR_EPS' },
   });
 
   console.log('Roles creados:', {
