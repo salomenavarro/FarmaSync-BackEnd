@@ -58,6 +58,12 @@ export class GetAdminDashboardUseCase {
           ...(filtros?.sedeId ? { sedeId: filtros.sedeId } : {}),
         },
         include: {
+          sede: {
+            select: {
+              nombre: true,
+              ciudad: true,
+            },
+          },
           medicamento: {
             select: {
               nombreGenerico: true,
@@ -90,8 +96,29 @@ export class GetAdminDashboardUseCase {
         id: item.id,
         medicamento: nombre,
         sedeId: item.sedeId,
+        sedeNombre: item.sede.nombre,
+        ciudad: item.sede.ciudad,
         unidadesDisponibles: item.cantidad,
         nivel: item.cantidad === 0 ? ('CRITICO' as const) : ('BAJO' as const),
+      };
+    });
+
+    const sedesFiltradas = filtros?.sedeId
+      ? sedes.filter((s) => s.id === filtros.sedeId)
+      : sedes;
+
+    const desabastecimientoPorSede = sedesFiltradas.map((sede) => {
+      const alertasSede = alertasStock.filter((a) => a.sedeId === sede.id);
+      const agotados = alertasSede.filter((a) => a.nivel === 'CRITICO').length;
+      const stockBajo = alertasSede.filter((a) => a.nivel === 'BAJO').length;
+
+      return {
+        sedeId: sede.id,
+        sedeNombre: sede.nombre,
+        ciudad: sede.ciudad,
+        medicamentosAgotados: agotados,
+        medicamentosStockBajo: stockBajo,
+        totalEnAlerta: alertasSede.length,
       };
     });
 
@@ -100,15 +127,31 @@ export class GetAdminDashboardUseCase {
       (r) => r.estado === 'ENTREGADA',
     ).length;
     const reservasNoEfectuadas = reservas.filter(
-      (r) => r.estado === 'CANCELADA_USUARIO' || r.estado === 'EXPIRADA',
+      (r) =>
+        r.estado === 'CANCELADA_USUARIO' ||
+        r.estado === 'EXPIRADA' ||
+        r.estado === 'RECHAZADA_FARMACIA',
     ).length;
     const reservasPendientes = reservas.filter(
-      (r) => r.estado === 'PENDIENTE',
+      (r) =>
+        r.estado === 'PENDIENTE' ||
+        r.estado === 'LISTA_PARA_RETIRO',
     ).length;
 
+    const porcentajeEfectividad =
+      totalReservas > 0
+        ? Number(((reservasEntregadas / totalReservas) * 100).toFixed(2))
+        : 0;
+
+    const mapaSedes = new Map(sedes.map((s) => [s.id, s.nombre]));
     const mapaDemanda = new Map<
       string,
-      { fecha: string; sedeId: number; cantidadSolicitudes: number }
+      {
+        fecha: string;
+        sedeId: number;
+        sedeNombre: string;
+        cantidadSolicitudes: number;
+      }
     >();
 
     for (const reserva of reservas) {
@@ -122,6 +165,7 @@ export class GetAdminDashboardUseCase {
         mapaDemanda.set(clave, {
           fecha,
           sedeId: reserva.sedeId,
+          sedeNombre: mapaSedes.get(reserva.sedeId) ?? `Sede #${reserva.sedeId}`,
           cantidadSolicitudes: 1,
         });
       }
@@ -138,14 +182,18 @@ export class GetAdminDashboardUseCase {
         sedesRegistradas: sedes.filter((s) => s.activa).length,
         reservasTotales: totalReservas,
         medicamentosEnAlerta: alertasStock.length,
+        medicamentosAgotados: alertasStock.filter((a) => a.nivel === 'CRITICO')
+          .length,
       },
       alertasStock,
+      desabastecimientoPorSede,
       demanda,
       efectividad: {
         totalReservas,
         reservasEntregadas,
         reservasNoEfectuadas,
         reservasPendientes,
+        porcentajeEfectividad,
       },
     };
   }
