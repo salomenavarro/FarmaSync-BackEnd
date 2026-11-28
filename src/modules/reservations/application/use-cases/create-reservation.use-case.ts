@@ -6,12 +6,16 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/shared/database/prisma.service';
+import { NotificationsService } from '../../../notifications/application/services/notifications.service';
 import { ReservationRules } from '../../domain/entities/reservation-rules.entity';
 import { CreateReservationDto } from '../../presentation/http/dto/create-reservation.dto';
 
 @Injectable()
 export class CreateReservationUseCase {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async execute(userId: number, dto: CreateReservationDto) {
     const fechaRecogidaDate = new Date(dto.fechaRecogida);
@@ -76,7 +80,7 @@ export class CreateReservationUseCase {
     }
 
     // 4. Transacción atómica con bloqueo de fila (FOR UPDATE) en PostgreSQL
-    return this.prisma.$transaction(async (tx) => {
+    const reservaCreada = await this.prisma.$transaction(async (tx) => {
       const rows = await tx.$queryRaw<Array<{ id: number; cantidad: number }>>`
         SELECT id, cantidad
         FROM inventario_sedes
@@ -190,5 +194,24 @@ export class CreateReservationUseCase {
         },
       });
     });
+
+    await this.notificationsService.create({
+      userId,
+      tipo: 'CONFIRMACION_RESERVA',
+      categoria: 'RESERVA',
+      prioridad: 'INFORMATIVA',
+      titulo: `Reserva ${reservaCreada.codigoReserva} confirmada`,
+      mensaje: `Tu reserva de ${reservaCreada.medicamento.nombreGenerico} en ${reservaCreada.sede.nombre} fue registrada. Plazo límite de recogida: ${reservaCreada.fechaLimite.toLocaleString('es-CO')}.`,
+      reservaId: reservaCreada.id,
+      codigoReserva: reservaCreada.codigoReserva,
+      medicamentoId: reservaCreada.medicamento.id,
+      medicamentoNombre: reservaCreada.medicamento.nombreGenerico,
+      medicamentoCodigo: reservaCreada.medicamento.codigo,
+      sedeId: reservaCreada.sede.id,
+      sedeNombre: reservaCreada.sede.nombre,
+      fechaVencimiento: reservaCreada.fechaLimite,
+    });
+
+    return reservaCreada;
   }
 }

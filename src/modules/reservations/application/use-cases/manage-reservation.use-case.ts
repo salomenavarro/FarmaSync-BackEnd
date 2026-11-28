@@ -5,11 +5,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/shared/database/prisma.service';
+import { NotificationsService } from '../../../notifications/application/services/notifications.service';
 import { ReservationRules } from '../../domain/entities/reservation-rules.entity';
 
 @Injectable()
 export class ManageReservationUseCase {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   private calcularSla(createdAt: Date) {
     const minutosTranscurridos = Math.floor(
@@ -82,19 +86,40 @@ export class ManageReservationUseCase {
       fechaLimite: reserva.fechaLimite,
     });
 
-    return this.prisma.reserva.update({
+    const actualizada = await this.prisma.reserva.update({
       where: { id: reservaId },
       data: {
         fechaLimite: nuevaFechaLimite,
         prorrogaSolicitada: true,
+        recordatorio24hEnviado: false,
+        recordatorio2hEnviado: false,
       },
       include: {
         sede: { select: { id: true, nombre: true, direccion: true } },
         medicamento: {
-          select: { id: true, nombreGenerico: true, presentacion: true },
+          select: { id: true, codigo: true, nombreGenerico: true, presentacion: true },
         },
       },
     });
+
+    await this.notificationsService.create({
+      userId,
+      tipo: 'PRORROGA',
+      categoria: 'RESERVA',
+      prioridad: 'INFORMATIVA',
+      titulo: `Prórroga de 24 h aplicada a ${actualizada.codigoReserva}`,
+      mensaje: `Se extendió el plazo de recogida para ${actualizada.medicamento.nombreGenerico} en ${actualizada.sede.nombre}. Nueva fecha límite: ${actualizada.fechaLimite.toLocaleString('es-CO')}.`,
+      reservaId: actualizada.id,
+      codigoReserva: actualizada.codigoReserva,
+      medicamentoId: actualizada.medicamento.id,
+      medicamentoNombre: actualizada.medicamento.nombreGenerico,
+      medicamentoCodigo: actualizada.medicamento.codigo,
+      sedeId: actualizada.sede.id,
+      sedeNombre: actualizada.sede.nombre,
+      fechaVencimiento: actualizada.fechaLimite,
+    });
+
+    return actualizada;
   }
 
   async cancelByUser(userId: number, reservaId: number) {
@@ -241,7 +266,7 @@ export class ManageReservationUseCase {
       );
     }
 
-    return this.prisma.reserva.update({
+    const actualizada = await this.prisma.reserva.update({
       where: { id: reserva.id },
       data: {
         estado: 'LISTA_PARA_RETIRO',
@@ -258,6 +283,25 @@ export class ManageReservationUseCase {
         sede: true,
       },
     });
+
+    await this.notificationsService.create({
+      userId: actualizada.userId,
+      tipo: 'MEDICAMENTO_LISTO',
+      categoria: 'RESERVA',
+      prioridad: 'IMPORTANTE',
+      titulo: `Tu medicamento de la reserva ${actualizada.codigoReserva} ya está listo`,
+      mensaje: `El paquete con ${actualizada.medicamento.nombreGenerico} ha sido rotulado en ${actualizada.sede.nombre}. Puedes acercarte a ventanilla con tu código QR antes de ${actualizada.fechaLimite.toLocaleString('es-CO')}.`,
+      reservaId: actualizada.id,
+      codigoReserva: actualizada.codigoReserva,
+      medicamentoId: actualizada.medicamentoId,
+      medicamentoNombre: actualizada.medicamento.nombreGenerico,
+      medicamentoCodigo: actualizada.medicamento.codigo,
+      sedeId: actualizada.sedeId,
+      sedeNombre: actualizada.sede.nombre,
+      fechaVencimiento: actualizada.fechaLimite,
+    });
+
+    return actualizada;
   }
 
   async markAsDelivered(codigoReserva: string, farmaceuticoId?: number) {
@@ -341,8 +385,8 @@ export class ManageReservationUseCase {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.reserva.update({
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const res = await tx.reserva.update({
         where: { id: reserva.id },
         data: {
           estado: 'RECHAZADA_FARMACIA',
@@ -372,7 +416,53 @@ export class ManageReservationUseCase {
         },
       });
 
-      return updated;
+      return res;
     });
+
+    // Buscar sedes alternativas activas con unidades disponibles
+    const sedesAlternativas = await this.prisma.inventarioSede.findMany({
+      where: {
+        medicamentoId: reserva.medicamentoId,
+        sedeId: { not: reserva.sedeId },
+        cantidad: { gt: 0 },
+        sede: { activa: true },
+      },
+      include: {
+        sede: { select: { nombre: true, direccion: true } },
+      },
+      orderBy: { cantidad: 'desc' },
+      take: 3,
+    });
+
+    const textoAlternativas =
+      sedesAlternativas.length > 0
+        ? ` Sedes alternativas con disponibilidad: ${sedesAlternativas
+            .map((a) => `${a.sede.nombre} (${a.cantidad} und.)`)
+            .join(', ')}.`
+        : ' Por el momento no hay otras sedes con stock disponible; puedes activar la alerta de reabastecimiento.';
+
+    const esInconsistenciaLote = /lote|vencid|dañad|danad|empaque|averia|avería/i.test(
+      motivo,
+    );
+
+    await this.notificationsService.create({
+      userId: updated.userId,
+      tipo: esInconsistenciaLote ? 'INCONSISTENCIA_LOTE' : 'CANCELACION_FARMACIA',
+      categoria: 'INCIDENCIA',
+      prioridad: 'URGENTE',
+      titulo: esInconsistenciaLote
+        ? `Inconsistencia de lote en reserva ${updated.codigoReserva}`
+        : `Reserva ${updated.codigoReserva} cancelada por la farmacia`,
+      mensaje: `La sede ${updated.sede.nombre} liberó tu reserva de ${updated.medicamento.nombreGenerico}. Motivo: ${motivo.trim()}.${textoAlternativas}`,
+      reservaId: updated.id,
+      codigoReserva: updated.codigoReserva,
+      medicamentoId: updated.medicamentoId,
+      medicamentoNombre: updated.medicamento.nombreGenerico,
+      medicamentoCodigo: updated.medicamento.codigo,
+      sedeId: updated.sedeId,
+      sedeNombre: updated.sede.nombre,
+    });
+
+    return updated;
   }
 }
