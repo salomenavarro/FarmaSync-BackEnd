@@ -43,7 +43,7 @@ model User {
   dependientes        Dependiente[]
   alertasStock        AlertaStock[]
   reservas            Reserva[]
-
+  notificaciones      Notificacion[]
   @@map("users")
 }
 
@@ -78,20 +78,21 @@ model UserSession {
 // ==========================================
 
 model Sede {
-  id          Int              @id @default(autoincrement())
-  nombre      String
-  ciudad      String
-  zona        String
-  direccion   String
-  latitud     Float?
-  longitud    Float?
-  activa      Boolean          @default(true)
-  createdAt   DateTime         @default(now()) @map("creado_en")
-  updatedAt   DateTime         @updatedAt @map("actualizado_en")
+  id           Int              @id @default(autoincrement())
+  nombre       String
+  ciudad       String
+  zona         String
+  direccion    String
+  latitud      Float?
+  longitud     Float?
+  activa       Boolean          @default(true)
+  createdAt    DateTime         @default(now()) @map("creado_en")
+  updatedAt    DateTime         @updatedAt @map("actualizado_en")
 
-  empleados   User[]
-  inventarios InventarioSede[]
-  reservas    Reserva[]
+  empleados    User[]
+  inventarios  InventarioSede[]
+  reservas     Reserva[]
+  alertasStock AlertaStock[]
 
   @@map("sedes")
 }
@@ -158,10 +159,12 @@ model AlertaStock {
   user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   medicamentoId Int         @map("medicamento_id")
   medicamento   Medicamento @relation(fields: [medicamentoId], references: [id], onDelete: Cascade)
+  sedeId        Int?        @map("sede_id")
+  sede          Sede?       @relation(fields: [sedeId], references: [id], onDelete: Cascade)
   notificado    Boolean     @default(false)
   createdAt     DateTime    @default(now()) @map("creado_en")
 
-  @@unique([userId, medicamentoId, notificado])
+  @@unique([userId, medicamentoId, sedeId, notificado])
   @@map("alertas_stock")
 }
 
@@ -207,5 +210,64 @@ model Reserva {
   entregadoPor       User?         @relation("EntregadoPor", fields: [entregadoPorId], references: [id], onDelete: SetNull)
   motivoRechazo      String?       @map("motivo_rechazo")
 
+  recordatorio24hEnviado Boolean       @default(false) @map("recordatorio_24h_enviado")
+  recordatorio2hEnviado  Boolean       @default(false) @map("recordatorio_2h_enviado")
+  alertaRetrasoEnviada   Boolean       @default(false) @map("alerta_retraso_enviada")
+
   @@map("reservas")
+}
+// ==========================================
+// MODULO 5: NOTIFICACIONES E INCIDENCIAS
+// ==========================================
+
+enum TipoNotificacion {
+  CONFIRMACION_RESERVA
+  MEDICAMENTO_LISTO
+  VENCIMIENTO_24H
+  VENCIMIENTO_2H
+  PRORROGA
+  EXPIRACION
+  REABASTECIMIENTO
+  RETRASO_ALISTAMIENTO
+  INCONSISTENCIA_LOTE
+  CANCELACION_FARMACIA
+}
+
+enum CategoriaNotificacion {
+  RESERVA
+  MEDICAMENTO
+  INCIDENCIA
+}
+
+enum PrioridadNotificacion {
+  INFORMATIVA
+  IMPORTANTE
+  URGENTE
+}
+
+model Notificacion {
+  id                Int                   @id @default(autoincrement())
+  userId            Int                   @map("user_id")
+  user              User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tipo              TipoNotificacion
+  categoria         CategoriaNotificacion
+  prioridad         PrioridadNotificacion
+  titulo            String
+  mensaje           String
+  leida             Boolean               @default(false)
+  fechaLectura      DateTime?             @map("fecha_lectura")
+
+  reservaId         Int?                  @map("reserva_id")
+  codigoReserva     String?               @map("codigo_reserva")
+  medicamentoId     Int?                  @map("medicamento_id")
+  medicamentoNombre String?               @map("medicamento_nombre")
+  medicamentoCodigo String?               @map("medicamento_codigo")
+  sedeId            Int?                  @map("sede_id")
+  sedeNombre        String?               @map("sede_nombre")
+  fechaVencimiento  DateTime?             @map("fecha_vencimiento")
+
+  createdAt         DateTime              @default(now()) @map("creado_en")
+
+  @@index([userId, leida])
+  @@map("notificaciones")
 }
