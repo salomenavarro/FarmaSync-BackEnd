@@ -1,4 +1,4 @@
-﻿import {
+import {
   Body,
   Controller,
   Get,
@@ -75,8 +75,20 @@ export class MedicinesController {
   subscribeAlert(
     @Req() req: any,
     @Param('id', ParseIntPipe) id: number,
+    @Body('sedeId') bodySedeId?: number,
+    @Query('sedeId') querySedeId?: string,
   ) {
-    return this.manageStockAlertsUseCase.subscribe(req.userId, id);
+    const resolvedSedeId =
+      bodySedeId !== undefined && bodySedeId !== null
+        ? Number(bodySedeId)
+        : querySedeId !== undefined && querySedeId !== ''
+          ? Number(querySedeId)
+          : undefined;
+    return this.manageStockAlertsUseCase.subscribe(
+      req.userId,
+      id,
+      resolvedSedeId,
+    );
   }
 
   @Get('alertas/mias')

@@ -1,12 +1,16 @@
-﻿import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/shared/database/prisma.service';
+import { NotificationsService } from '../../../notifications/application/services/notifications.service';
 import { InventoryRules } from '../../domain/entities/inventory-status.entity';
 import { UpdateStockDto } from '../../presentation/http/dto/update-stock.dto';
 import { IngresarLoteEanDto } from '../../presentation/http/dto/ingresar-lote-ean.dto';
 
 @Injectable()
 export class UpdateStockUseCase {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async execute(medicamentoId: number, dto: UpdateStockDto) {
     const medicamento = await this.prisma.medicamento.findUnique({
@@ -54,24 +58,38 @@ export class UpdateStockUseCase {
 
     if (dto.cantidad > 0) {
       const alertasPendientes = await this.prisma.alertaStock.findMany({
-        where: { medicamentoId, notificado: false },
+        where: {
+          medicamentoId,
+          notificado: false,
+          OR: [{ sedeId: dto.sedeId }, { sedeId: null }],
+        },
       });
 
       if (alertasPendientes.length > 0) {
-        await this.prisma.alertaStock.deleteMany({
-          where: {
-            medicamentoId,
-            notificado: true,
-            userId: { in: alertasPendientes.map((a) => a.userId) },
-          },
-        });
+        const idsAlertas = alertasPendientes.map((a) => a.id);
 
         const updated = await this.prisma.alertaStock.updateMany({
-          where: { medicamentoId, notificado: false },
+          where: { id: { in: idsAlertas } },
           data: { notificado: true },
         });
 
         alertasNotificadas = updated.count;
+
+        for (const alerta of alertasPendientes) {
+          await this.notificationsService.create({
+            userId: alerta.userId,
+            tipo: 'REABASTECIMIENTO',
+            categoria: 'MEDICAMENTO',
+            prioridad: 'IMPORTANTE',
+            titulo: `${medicamento.nombreGenerico} disponible en ${sede.nombre}`,
+            mensaje: `Se reabasteció ${medicamento.nombreGenerico} (${medicamento.presentacion}) en ${sede.nombre} con ${dto.cantidad} unidades disponibles. Ya puedes realizar tu reserva.`,
+            medicamentoId: medicamento.id,
+            medicamentoNombre: medicamento.nombreGenerico,
+            medicamentoCodigo: medicamento.codigo,
+            sedeId: sede.id,
+            sedeNombre: sede.nombre,
+          });
+        }
       }
     }
 
